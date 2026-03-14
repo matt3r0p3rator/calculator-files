@@ -27,3 +27,30 @@ def get_matrix_input(n_rows, n_cols):
             except ValueError:
                 print("  [!] Invalid input. Use numbers only (e.g. 1 -2 3.5 7).")
     return matrix
+
+def main():
+    print("\n=== Cramer's Rule Solver ===")
+    print("This tool solves systems of linear equations using Cramer's rule.")
+    
+    while True:
+        try:
+            n_vars = int(input("\nEnter the number of variables (1-3): ").strip())
+            if n_vars < 1 or n_vars > 3:
+                print("Please enter a number between 1 and 3.")
+                continue
+            break
+        except ValueError:
+            print("Invalid input. Please enter an integer between 1 and 3.")
+
+    n_rows = n_vars
+    n_cols = n_vars + 1
+
+    matrix = get_matrix_input(n_rows, n_cols)
+
+    try:
+        solutions = solve_discriminant(matrix)
+        print("\nSolutions:")
+        for i, sol in enumerate(solutions):
+            print(f"  Variable {i + 1}: {sol:.4f}")
+    except ValueError as e:
+        print(f"\n[!] Error: {e}")
