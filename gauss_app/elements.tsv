@@ -1,0 +1,10 @@
+AtomicNumber	Symbol	ElementName	AtomicMass	Category	Group	Period	Block	ElectronConfiguration	Electronegativity	Density	NumberofNeutrons	NumberofProtons	NumberofElectrons	AtomicRadius	FirstIonization	MeltingPoint	BoilingPoint	NumberOfIsotopes	Discoverer	Year	SpecificHeat	NumberofShells	NumberofValence
+1	H	Hydrogen	1.008	Nonmetal	1	1	s	1s1	2.20	0.000089	0	1	1	53	1312.0	14	20	3	Cavendish	1766	14.3	1	1
+2	He	Helium	4.003	Noble Gas	18	1	s	1s2	0	0.000178	2	2	2	31	2372.3	0	4	5	Janssen	1868	5.19	1	2
+3	Li	Lithium	6.94	Alkali Metal	1	2	s	[He] 2s1	0.98	0.534	4	3	3	167	520.2	453	1603	5	Arfvedson	1817	3.58	2	1
+4	Be	Beryllium	9.012	Alkaline Earth Metal	2	2	s	[He] 2s2	1.57	1.85	5	4	4	112	899.5	1560	2742	6	Vauquelin	1798	1.82	2	2
+6	C	Carbon	12.011	Nonmetal	14	2	p	[He] 2s2 2p2	2.55	2.26	6	6	6	67	1086.5	3823	4300	15	Ancient	Unknown	0.71	2	4
+8	O	Oxygen	15.999	Nonmetal	16	2	p	[He] 2s2 2p4	3.44	0.001429	8	8	8	48	1313.9	54	90	11	Priestley/Scheele	1774	0.92	2	6
+26	Fe	Iron	55.845	Transition Metal	8	4	d	[Ar] 3d6 4s2	1.83	7.874	30	26	26	126	762.5	1811	3134	28	Ancient	Unknown	0.44	4	8
+79	Au	Gold	196.967	Transition Metal	11	6	d	[Xe] 4f14 5d10 6s1	2.54	19.3	118	79	79	144	890.1	1337	3129	36	Ancient	Unknown	0.13	6	1
+92	U	Uranium	238.029	Actinide	3	7	f	[Rn] 5f3 6d1 7s2	1.38	19.1	146	92	92	156	597.6	1408	4404	21	Klaproth	1789	0.12	7	2
