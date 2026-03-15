@@ -1,0 +1,81 @@
+Theme Editor v2.0 by Levak (17/01/13)
+http://tiplanet.org
+http://levak.free.fr
+
+/!\ Important : You need Ndless 3.1 >= r680 (~ August 2012) /!\
+-------------------------------------------------------------
+http://www.unsads.com/projects/nsptools/downloader/download/release/1
+
+I] No Gui version (by default when launching ThemeEditor.tns)
+
+     * Controls :
+	In the general view :
+	 - Up/Down    : Select your color
+	 - Right/Left : When text is too long, offset the width to see the complete title
+	 - Esc        : Saves the modifications to the theme file and exit
+	 - Enter      : Open the color picker
+	
+	In the color picker view : 
+	 - Right/Left : Change channel
+	 - Up/Down    : Change the current channel value
+	 - 0-9/A-F    : set directly the color code in hexadecimal
+	 - Esc        : Cancel the modifications
+	 - Enter      : Applies the modifications
+	
+	In all views :
+	 - I 	 : Invert all colors/current color
+	 - R	 : Randomize all colors/current color
+
+II] Gui version (by default when launching it from Home>5>6)
+
+	* Every modification is performed in real time (no undo) contrary to the no GUI mode
+	  (in order to view the modification on the active window)
+
+	* Most of the strings are multilingual (not all of them) by using already loaded OS strings
+	  (ex : Theme Editor, Open, Save etc ..)
+
+	* Options enable to twick ThemeEditor behavior to shape everybody needs
+		- Patch OS Menu
+		  This option will activate the hooking procedure in order to modify the OS menu.
+		  If for some reason you don't like it, or it fails, you can disable it by unchecking
+		  the CheckBox. Notice that you will need to reboot in order to take this modification in account.
+		- Both, Gui only, No Gui are modes that control what ThemeEditor to launch when lauching it from
+		  the menu or launching it from the directory listing.
+		  "Both" corresponds to the default mode : Menu = Gui mode, Directory = No Gui mode.
+		  "Gui only" will disable completly the No Gui mode. You can reactivate it from the options thought.
+		  "No Gui" will disable completly the Gui mode. Notice : you cannot reactivate it (see III] Uninstalling).
+
+III] Uninstalling
+
+    ThemeEditor creates an hidden config file in order to keep the user configuration and the current theme file.
+    Why hidden ? Because you don't want to bother with such a file in the crappy and slow directory listing.
+
+	* In order to delete the hidden config file (cleanup, fedup, corrupted or bad move),
+	  rename "ThemeEditor.tns" to "uninstall.tns" (Ctrl+Menu>7 "uninstall") and launch it.
+	  This is a special mode where ThemeEditor knows you want him to delete the config file.
+
+	* You can also delete the hidden config file by seaching it from TI-Nspire Computer [Link/Student/Teacher] Software
+	  by the name "config.theme" at the root of "My Documents".
+
+IV] Protip : 
+	* If you want to create a new theme, copy/paste the default_themes.themes.tns
+	  and open it, then start your modifications. Every modification will be saved.
+
+	* Some gradients fail for certains colors.
+	  Remind not to use plain dark or plain white for these fields.
+
+	* Gui mode is nice to see interactive changes, but not really appropriate to be fast and efficient.
+	  Then comes the No Gui mode that is a completly drawn interface that has a more developper oriented kind.
+
+	* This version of ThemeEditor uses nFrame and nGC that are two syscalls libraries I've been developping for 6 months.
+	  I do not include them in the tarball since I do not juge them as mature as they can be (incomprehensible bugs/crashes,
+	  incomplete API, get/set etc ...) and may be included one day in Ndless trunk. Be patient if you want to do the same Gui.
+
+
+____
+    \\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\
+    | Thanks to that badass Adriweb for his stupids ideas.|
+    ///////////////////////////////////////////////////////
+ |``                                                 |
+ |  /`````````````````````````````````````````````\  |
+` ``                                               ```

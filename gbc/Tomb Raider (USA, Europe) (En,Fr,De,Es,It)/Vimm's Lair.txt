@@ -1,0 +1,11 @@
+Thanks for visiting The Vault at Vimm's Lair.
+
+	vimm.net
+
+This Game Boy Color game is verified by No-Intro.
+
+Tomb Raider (USA, Europe) (En,Fr,De,Es,It).gbc
+CRC:   2988fc78
+MD5:   74b9b221c2b32147422144b327bd5f30
+SHA-1: 208b054ca63c43f32befa989c75e8de96847f4fe
+Date:  2023-01-04

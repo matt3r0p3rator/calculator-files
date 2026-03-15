@@ -1,0 +1,11 @@
+Thanks for visiting The Vault at Vimm's Lair.
+
+	vimm.net
+
+This Game Boy Color game is verified by No-Intro.
+
+Legend of Zelda, The - Oracle of Ages (USA, Australia).gbc
+CRC:   3800a387
+MD5:   c4639cc61c049e5a085526bb6cac03bb
+SHA-1: 880374fb978b18af4aa529e2e32f7ffb4d7dd2f4
+Date:  2023-01-04

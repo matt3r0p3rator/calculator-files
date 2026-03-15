@@ -1,0 +1,12 @@
+Thanks for visiting The Vault at Vimm's Lair.
+
+	vimm.net
+
+This Game Boy Advance media is verified by No-Intro.
+
+Golden Sun (USA, Europe).gba
+CRC:   e1fb68e8
+MD5:   1cdd7f33c9a27061201e1d1ce029a700
+SHA-1: 5c4695205413df7db52b9a184815a07783999971
+
+Date:  2024-10-07 13:29:24

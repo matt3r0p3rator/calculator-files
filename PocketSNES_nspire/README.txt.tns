@@ -1,0 +1,40 @@
+==========================
+PocketSNES for TI Nspire CX
+==========================
+
+Port done by gameblabla
+
+PocketSNES was originally a SNES emulator based on Snes9X by Nebuleon for GCW0.
+
+This new version has 43 new cores based on several versions : 
+# The full Snes9X 1.43 core      : Most compatible but slower
+# Snes9x 1.43 with no sound code : Most Balanced
+# The full Snes9x 1.39 core      : Pretty fast but much less compatible
+# A minimal core of Snes9x 1.39  : Very fast but not very compatible
+
+They are divided into 4 divided files. 
+(PocketSNES_139_minimal.tns, PocketSNES_139.tns, PocketSNES_143.tns and PocketSNES_143APU.tns)
+Try to play your game with the minimal Snes9x 1.39 version first.
+If this does not work (or not properly), try the other ones.
+
+==========
+CONTROLS
+==========
+
+CTRL = A
+
+SHIFT = B
+
+VAR = X
+
+DEL = Y
+
+TAB = L
+
+MENU= R
+
+ENTER = START
+
+MINUS = SELECT
+
+ESC = EXIT

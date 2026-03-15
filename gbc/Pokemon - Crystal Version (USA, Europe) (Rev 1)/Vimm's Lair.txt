@@ -1,0 +1,11 @@
+Thanks for visiting The Vault at Vimm's Lair.
+
+	vimm.net
+
+This Game Boy Color game is verified by No-Intro.
+
+Pokemon - Crystal Version (USA, Europe) (Rev 1).gbc
+CRC:   3358e30a
+MD5:   301899b8087289a6436b0a241fbbb474
+SHA-1: f2f52230b536214ef7c9924f483392993e226cfb
+Date:  2023-01-04

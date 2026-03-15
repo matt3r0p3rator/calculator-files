@@ -1,0 +1,12 @@
+Thanks for visiting The Vault at Vimm's Lair.
+
+	vimm.net
+
+This Game Boy Advance media is verified by No-Intro.
+
+Super Mario Advance (USA, Europe).gba
+CRC:   1e4c6d6a
+MD5:   ff6b0c48065389b888c7a78731d4b58d
+SHA-1: f071d45d8f5cb05b48d7d2b804c6cb6a79ad96fb
+
+Date:  2024-10-07 13:29:24
