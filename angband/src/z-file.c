@@ -869,7 +869,25 @@ bool file_move(const char *fname, const char *newname)
 bool file_exists(const char *fname)
 {
 	struct stat st;
-	return (stat(fname, &st) == 0);
+	if (stat(fname, &st) == 0)
+		return true;
+#if defined(USE_NSPIRE)
+	/* On the Nspire all files must be named *.tns.  Try appending the
+	 * suffix when the plain name is not found. */
+	{
+		size_t len = strlen(fname);
+		if (len < 4 || strcmp(fname + len - 4, ".tns") != 0) {
+			char buf[1024];
+			if (len + 4 < sizeof(buf)) {
+				memcpy(buf, fname, len);
+				memcpy(buf + len, ".tns", 5);
+				if (stat(buf, &st) == 0)
+					return true;
+			}
+		}
+	}
+#endif /* USE_NSPIRE */
+	return false;
 }
 
 #elif defined(WINDOWS)
@@ -961,7 +979,11 @@ bool file_newer(const char *first, const char *second)
 	if (stat(second, &stat2) != 0) return true;
 
 	/* Compare modification times. */
+#if defined(USE_NSPIRE)
+	return stat1.st_mtim.tv_sec > stat2.st_mtim.tv_sec ? true : false;
+#else
 	return stat1.st_mtime > stat2.st_mtime ? true : false;
+#endif
 #else /* HAVE_STAT */
 	return false;
 #endif /* !HAVE_STAT */
@@ -991,6 +1013,14 @@ ang_file *file_open(const char *fname, file_mode mode, file_type ftype)
 	switch (mode) {
 		case MODE_WRITE: { 
 			if (ftype == FTYPE_SAVE) {
+#if defined(USE_NSPIRE)
+				/* The Ndless _open() has an inverted O_CREAT|O_EXCL
+				 * check: it returns EEXIST when the file does NOT
+				 * exist, breaking every save.  The temp file name is
+				 * already randomised by file_get_savefile(), so just
+				 * use fopen("wb") directly. */
+				f->fh = fopen(buf, "wb");
+#else
 				/* open only if the file does not exist */
 				int fd;
 				fd = open(buf, O_CREAT | O_EXCL | O_WRONLY | O_BINARY, S_IRUSR | S_IWUSR);
@@ -1000,6 +1030,7 @@ ang_file *file_open(const char *fname, file_mode mode, file_type ftype)
 				} else {
 					f->fh = fdopen(fd, "wb");
 				}
+#endif
 			} else {
 				f->fh = fopen(buf, "wb");
 			}

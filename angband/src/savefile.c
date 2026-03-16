@@ -390,6 +390,31 @@ bool savefile_save(const char *path)
 	/* Generate a CharOutput.txt, mainly for angband.live, when saving. */
 	(void) save_charoutput();
 
+#if defined(USE_NSPIRE)
+	/*
+	 * The TI-Nspire OS does not implement rename() reliably, so the
+	 * normal temp-file → rename dance will always fail.  Instead, write
+	 * the save directly to the target path.  nspire_fopen() (intercepted
+	 * via the fopen macro in nspire-compat.h) will append ".tns"
+	 * automatically, turning "…/save/PLAYER" into "…/save/PLAYER.tns".
+	 * fopen("wb") creates the file on the first save and truncates it on
+	 * subsequent saves, which is exactly what we need.
+	 */
+	file = file_open(path, MODE_WRITE, FTYPE_SAVE);
+	if (file) {
+		if (file_write(file, (char *) &savefile_magic, 4) &&
+			file_write(file, (char *) &savefile_name, 4)) {
+			character_saved = try_save(file);
+		} else {
+			character_saved = false;
+		}
+		file_close(file);
+	} else {
+		character_saved = false;
+	}
+	return character_saved;
+#endif /* USE_NSPIRE */
+
 	/* New savefile */
 	safe_setuid_grab();
 	file_get_savefile(old_savefile, sizeof(old_savefile), path, "old");

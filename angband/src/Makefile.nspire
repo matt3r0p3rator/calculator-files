@@ -1,0 +1,129 @@
+#------------------------------------------------------------------------------
+# Makefile.nspire
+#
+# Build Angband as a TI-Nspire CX II Ndless application (.tns)
+#
+# Prerequisites
+# -------------
+#   export PATH=$PATH:/home/matt3r/calculator-files/Ndless/ndless-sdk/bin
+#
+#   The arm-none-eabi toolchain must be installed; nspire-gcc locates it
+#   automatically via `nspire-tools _toolchainpath`.
+#
+# Usage
+# -----
+#   cd angband/src
+#   make -f Makefile.nspire          # build angband.tns
+#   make -f Makefile.nspire clean    # remove generated files
+#
+# On-calculator file layout
+# -------------------------
+#   /documents/angband.tns            <- the executable
+#   /documents/angband/lib/           <- game data  (copy from angband/lib/)
+#   /documents/angband/lib/save/      <- save files (auto-created on first run)
+#------------------------------------------------------------------------------
+
+# ---- Auto-detect SDK root via nspire-tools (found through PATH) -----------
+NDLESS_SDK := $(shell nspire-tools path)
+
+# ---- Toolchain (all in the SDK bin/ directory) ----------------------------
+GCC      = nspire-gcc
+GXX      = nspire-g++
+LD       = nspire-ld
+AS       = nspire-as
+GENZEHN  = genzehn
+MAKE_PRG = make-prg
+
+# ---- Project ---------------------------------------------------------------
+EXE     = angband
+VERSION = 4.2.6
+
+# ---- Compiler flags --------------------------------------------------------
+#
+# -I.            so Angband's own headers resolve relative to src/
+# -I nspire      so nspire/ headers resolve when compiled from nspire/
+# nspire-gcc already appends $(NDLESS_SDK)/include automatically.
+#
+# -DUSE_NSPIRE   enables main-nspire.c and the nspire/ driver
+# -DNDS          reuses the NDS "not-a-UNIX" guard in h-basic.h so that
+#                UNIX-only code (signals, /tmp paths, etc.) is skipped
+# -DHAVE_*       tell z-file.c which POSIX headers Ndless newlib provides
+
+CFLAGS = -Wall -W -marm -Os \
+         -I. -I nspire \
+         -include nspire/nspire-compat.h \
+         -DUSE_NSPIRE \
+         -DNDS \
+         -DHAVE_DIRENT_H \
+         -DHAVE_MKDIR
+
+# ---- Linker flags ----------------------------------------------------------
+#
+# libndls.a     – Ndless helpers (isKeyPressed, lcd_blit, msleep, ...)
+# libsyscalls.a – OS syscall stubs
+# -lm           – math library (sqrt, etc.)
+#
+# nspire-tools path ends with '/', so $(NDLESS_SDK)lib == .../ndless-sdk/lib
+
+LDFLAGS = -Wl,--gc-sections \
+          -Wl,--allow-multiple-definition \
+          -Wl,--defsym=_fini=0 \
+          -L$(NDLESS_SDK)lib \
+          -lndls -lsyscalls -lm
+
+# ---- Zehn packaging --------------------------------------------------------
+ZEHNFLAGS = --name "Angband $(VERSION)"
+
+# ---- Source files ----------------------------------------------------------
+# Pull in ZFILES, ANGFILES0 and ANGFILES from Makefile.src.
+# ANGFILES_USED excludes the borg AI to keep build time and size reasonable.
+# Uncomment the second line to include the full borg AI module.
+
+# Makefile.src contains a buildid.o rule that would become the default target
+# if we let make see it first – override that with an explicit default goal.
+.DEFAULT_GOAL := all
+
+include Makefile.src
+
+ANGFILES_USED = $(ANGFILES0) buildid.o
+# ANGFILES_USED = $(ANGFILES)   # uncomment to enable the borg AI
+
+NSPIREFILES = \
+    main-nspire.o \
+    nspire/nspire-draw.o \
+    nspire/nspire-event.o \
+    nspire/nspire-input.o \
+    nspire/nspire-mem-alt.o \
+    nspire/nspire-fopen.o
+
+OBJS = $(ZFILES) $(ANGFILES_USED) $(NSPIREFILES)
+
+# ---- Build rules -----------------------------------------------------------
+.PHONY: all clean
+
+all: $(EXE).tns
+
+# Subdirectory rules must come before the generic %.o rule
+nspire/%.o: nspire/%.c
+	$(GCC) $(CFLAGS) -c $< -o $@
+
+borg/%.o: borg/%.c
+	$(GCC) $(CFLAGS) -c $< -o $@
+
+%.o: %.c
+	$(GCC) $(CFLAGS) -c $< -o $@
+
+buildid.o: $(ANGFILES0)
+	$(GCC) $(CFLAGS) -c buildid.c -o $@
+
+$(EXE).elf: $(OBJS)
+	$(LD) $(OBJS) -o $@ $(LDFLAGS)
+
+$(EXE).tns: $(EXE).elf
+	$(GENZEHN) --input $< --output $(EXE).zehn $(ZEHNFLAGS)
+	$(MAKE_PRG) $(EXE).zehn $@
+	rm -f $(EXE).zehn
+
+clean:
+	rm -f $(NSPIREFILES) $(ZFILES) $(ANGFILES_USED) borg/*.o
+	rm -f $(EXE).elf $(EXE).tns $(EXE).zehn

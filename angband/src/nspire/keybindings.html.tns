@@ -1,0 +1,122 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>Angband Keys</title>
+</head>
+<body>
+
+<h1>Angband &mdash; TI-Nspire CX II Keybindings</h1>
+
+<h2>Modifiers</h2>
+<table border="1" cellpadding="3">
+<tr><th>Key</th><th>Effect</th></tr>
+<tr><td>shift</td><td>Shifted symbol</td></tr>
+<tr><td>ctrl</td><td>Control character (^A&ndash;^Z)</td></tr>
+<tr><td>esc / menu</td><td>Escape / cancel</td></tr>
+</table>
+
+<h2>Special Keys</h2>
+<table border="1" cellpadding="3">
+<tr><th>Key</th><th>Sends</th><th>Notes</th></tr>
+<tr><td>enter / ret</td><td>CR</td><td>Confirm</td></tr>
+<tr><td>del</td><td>Backspace</td><td></td></tr>
+<tr><td>tab</td><td>Tab</td><td></td></tr>
+<tr><td>space</td><td>Space</td><td></td></tr>
+<tr><td>home</td><td>Home</td><td>Angband HOME key</td></tr>
+<tr><td>? / doc</td><td>?</td><td>Help (bypasses OS menu)</td></tr>
+</table>
+
+<h2>Movement (touchpad)</h2>
+<p>Use touchpad for movement, arrow keys for menus.</p>
+<table border="1" cellpadding="3">
+<tr><th>Input</th><th>Sends</th><th>Direction</th></tr>
+<tr><td>&#8593;</td><td>8</td><td>North</td></tr>
+<tr><td>&#8595;</td><td>2</td><td>South</td></tr>
+<tr><td>&#8592;</td><td>4</td><td>West</td></tr>
+<tr><td>&#8594;</td><td>6</td><td>East</td></tr>
+<tr><td>&#8599;</td><td>9</td><td>North-East</td></tr>
+<tr><td>&#8600;</td><td>3</td><td>South-East</td></tr>
+<tr><td>&#8601;</td><td>1</td><td>South-West</td></tr>
+<tr><td>&#8598;</td><td>7</td><td>North-West</td></tr>
+<tr><td>click</td><td>5</td><td>Wait in place</td></tr>
+<tr><td>arrow keys</td><td>&mdash;</td><td>Navigate menus</td></tr>
+</table>
+
+<h2>Digits</h2>
+<table border="1" cellpadding="3">
+<tr><th>Key</th><th>Normal</th><th>+Shift</th></tr>
+<tr><td>0</td><td>0</td><td>)</td></tr>
+<tr><td>1</td><td>1</td><td>!</td></tr>
+<tr><td>2</td><td>2</td><td>@</td></tr>
+<tr><td>3</td><td>3</td><td>#</td></tr>
+<tr><td>4</td><td>4</td><td>$</td></tr>
+<tr><td>5</td><td>5</td><td>%</td></tr>
+<tr><td>6</td><td>6</td><td>^</td></tr>
+<tr><td>7</td><td>7</td><td>&amp;</td></tr>
+<tr><td>8</td><td>8</td><td>*</td></tr>
+<tr><td>9</td><td>9</td><td>(</td></tr>
+</table>
+
+<h2>Symbols</h2>
+<table border="1" cellpadding="3">
+<tr><th>Key</th><th>Normal</th><th>+Shift</th></tr>
+<tr><td>. (period)</td><td>.</td><td>&gt;</td></tr>
+<tr><td>, (comma)</td><td>,</td><td>&lt;</td></tr>
+<tr><td>- (minus)</td><td>-</td><td>_</td></tr>
+<tr><td>+ (plus)</td><td>+</td><td>=</td></tr>
+<tr><td>( (LP)</td><td>(</td><td>[</td></tr>
+<tr><td>) (RP)</td><td>)</td><td>]</td></tr>
+<tr><td>div (divide)</td><td>/</td><td>/</td></tr>
+<tr><td>x (multiply)</td><td>*</td><td>|</td></tr>
+<tr><td>= (equals)</td><td>=</td><td>+</td></tr>
+<tr><td>^ (EXP)</td><td>^</td><td>~ (knowledge browser)</td></tr>
+<tr><td>? (ques)</td><td>?</td><td>?</td></tr>
+<tr><td>: (colon)</td><td>:</td><td>;</td></tr>
+<tr><td>" (quote)</td><td>"</td><td>'</td></tr>
+<tr><td>' (apostrophe)</td><td>'</td><td>`</td></tr>
+<tr><td>| (bar)</td><td>|</td><td>\</td></tr>
+<tr><td>&gt; (GTHAN)</td><td>&gt;</td><td>}</td></tr>
+<tr><td>&lt; (LTHAN)</td><td>&lt;</td><td>{</td></tr>
+</table>
+
+<h2>Common Commands</h2>
+<table border="1" cellpadding="3">
+<tr><th>Action</th><th>Key</th></tr>
+<tr><td>Pick up</td><td>g</td></tr>
+<tr><td>Drop</td><td>d</td></tr>
+<tr><td>Wear / wield</td><td>w</td></tr>
+<tr><td>Take off</td><td>t</td></tr>
+<tr><td>Inventory</td><td>i</td></tr>
+<tr><td>Equipment</td><td>e</td></tr>
+<tr><td>Use / staff</td><td>u</td></tr>
+<tr><td>Quaff potion</td><td>q</td></tr>
+<tr><td>Read scroll</td><td>r</td></tr>
+<tr><td>Zap wand</td><td>z</td></tr>
+<tr><td>Fire missile</td><td>f</td></tr>
+<tr><td>Cast spell</td><td>m</td></tr>
+<tr><td>Look around</td><td>l</td></tr>
+<tr><td>Help</td><td>? or doc</td></tr>
+<tr><td>Knowledge browser</td><td>shift+^ (sends ~)</td></tr>
+<tr><td>Character screen</td><td>C</td></tr>
+<tr><td>Save &amp; quit</td><td>ctrl+X</td></tr>
+<tr><td>Save game</td><td>ctrl+S</td></tr>
+<tr><td>Stairs down</td><td>&gt; (shift+.)</td></tr>
+<tr><td>Stairs up</td><td>&lt; (shift+,)</td></tr>
+<tr><td>Open door</td><td>o</td></tr>
+<tr><td>Close door</td><td>c</td></tr>
+<tr><td>Tunnel</td><td>T (shift+t)</td></tr>
+<tr><td>Search</td><td>s</td></tr>
+<tr><td>Run</td><td>. then direction</td></tr>
+<tr><td>Target</td><td>* (shift+8)</td></tr>
+<tr><td>Cancel</td><td>esc</td></tr>
+</table>
+
+<h2>File Layout on Calculator</h2>
+<pre>
+/documents/angband/lib/        - game data (all files end in .tns)
+/documents/angband/lib/save/   - save files (PLAYER.tns)
+</pre>
+
+</body>
+</html>
