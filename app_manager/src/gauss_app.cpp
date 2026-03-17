@@ -131,7 +131,7 @@ void GaussApp::run(TIGui& gui) {
                         if (cursor_c > 0) cursor_c--;
                     } else if (sym == SDLK_RIGHT || sym == SDLK_KP6) {
                         if (cursor_c < num_cols - 1) cursor_c++;
-                    } else if (sym = SDLK_TAB) {
+                    } else if (sym == SDLK_TAB) {
                         if (cursor_c < num_cols - 1) {
                             cursor_c++;
                         } else if (cursor_r < num_rows - 1) {
