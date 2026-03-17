@@ -195,9 +195,18 @@ static errr Term_xtra_nspire(int n, int v)
         return 0;
 
     case TERM_XTRA_DELAY:
-        /* Delay v milliseconds */
-        if (v > 0)
-            msleep((unsigned)v);
+        /* Delay v milliseconds, but remain responsive: sleep in 10 ms
+         * chunks and exit early if the player presses a key.  This makes
+         * long visual-effect sequences (e.g. ball spells) interruptible. */
+        if (v > 0) {
+            int remaining = v;
+            while (remaining > 0 && !nspire_event_ready()) {
+                int chunk = (remaining < 10) ? remaining : 10;
+                msleep((unsigned)chunk);
+                remaining -= chunk;
+                nspire_input_scan();
+            }
+        }
         return 0;
     }
 
@@ -218,9 +227,8 @@ static errr Term_curs_nspire(int x, int y)
  * -------------------------------------------------------------------- */
 static errr Term_wipe_nspire(int x, int y, int n)
 {
-    nspire_pixel_t dark = s_colour_table[COLOUR_DARK];
-    for (int i = 0; i < n; i++)
-        nspire_draw_char(x + i, y, ' ', dark, dark);
+    /* Bulk-fill the cells directly rather than rendering n space chars. */
+    nspire_fill_cells(x, y, n, s_colour_table[COLOUR_DARK]);
     return 0;
 }
 

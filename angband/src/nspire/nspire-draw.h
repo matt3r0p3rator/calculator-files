@@ -36,7 +36,9 @@
 /* Font cell size.
  * We render the 5×8 NDS bitmap font into 4-pixel-wide cells by ignoring
  * the 5th (almost always empty) column.  This gives exactly 80 terminal
- * columns at 320px screen width.                                        */
+ * columns at 320px screen width.
+ * Terminal cells start at pixel 0; all pixel x-positions are multiples
+ * of 4, keeping every cell 4-byte aligned for 32-bit framebuffer writes. */
 #define NSPIRE_FONT_W        4
 #define NSPIRE_FONT_H        8
 
@@ -89,6 +91,16 @@ void nspire_draw_char(int col, int row, int c,
  * Draw a cursor indicator (small rectangle outline) at cell (col, row).
  */
 void nspire_draw_cursor(int col, int row);
+
+/**
+ * Fill ncols terminal cells on the given row with a solid colour.
+ * Faster than calling nspire_draw_char with a space ncols times.
+ * @param col    starting terminal column
+ * @param row    terminal row
+ * @param ncols  number of cells to fill
+ * @param colour fill colour (RGB-565)
+ */
+void nspire_fill_cells(int col, int row, int ncols, nspire_pixel_t colour);
 
 /**
  * Draw a debug/log string starting at pixel position (px, py).

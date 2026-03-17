@@ -8,7 +8,7 @@
 #include <stdlib.h>
 #include <string.h>
 
-#define NSPIRE_EVENT_BUF_LEN  64
+#define NSPIRE_EVENT_BUF_LEN  128
 
 static nspire_event_t *s_buf   = NULL;
 static uint16_t        s_read  = 0;

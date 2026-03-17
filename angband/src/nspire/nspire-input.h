@@ -18,10 +18,10 @@
 #include <stdbool.h>
 
 /* Milliseconds before a held key begins to repeat. */
-#define NSPIRE_KEY_REPEAT_DELAY   400
+#define NSPIRE_KEY_REPEAT_DELAY   300
 
 /* Milliseconds between repeated key events while key is held. */
-#define NSPIRE_KEY_REPEAT_RATE    80
+#define NSPIRE_KEY_REPEAT_RATE    60
 
 /**
  * Scan the hardware keyboard once and push any new key events onto the

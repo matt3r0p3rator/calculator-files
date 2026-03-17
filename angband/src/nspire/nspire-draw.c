@@ -20,9 +20,11 @@
 /* -----------------------------------------------------------------------
  * Software framebuffer
  * -------------------------------------------------------------------- */
-/* One extra element absorbs the harmless out-of-bounds write that occurs
- * when drawing col 79 with the +1 screen-edge offset (x reaches 320). */
-static nspire_pixel_t framebuf[NSPIRE_SCREEN_W * NSPIRE_SCREEN_H + 1];
+static nspire_pixel_t framebuf[NSPIRE_SCREEN_W * NSPIRE_SCREEN_H];
+
+/* Dirty flag: set whenever the framebuffer is modified, cleared when
+ * flushed to the LCD.  Avoids the costly lcd_blit() when nothing changed. */
+static bool s_framebuf_dirty = false;
 
 /* -----------------------------------------------------------------------
  * Embedded 5×8 bitmap font (ASCII 0x00–0xFF)
@@ -41,6 +43,21 @@ static nspire_pixel_t framebuf[NSPIRE_SCREEN_W * NSPIRE_SCREEN_H + 1];
 #define EMPTY_ROW   0,0,0,0,0
 #define EMPTY_GLYPH EMPTY_ROW, EMPTY_ROW, EMPTY_ROW, EMPTY_ROW, \
                     EMPTY_ROW, EMPTY_ROW, EMPTY_ROW, EMPTY_ROW
+
+/* -----------------------------------------------------------------------
+ * Compact glyph mask table (built at init from nspire_font_data)
+ *
+ * For each of the 256 glyphs, one byte per row encodes which of the
+ * NSPIRE_FONT_W (=4) drawn columns is a foreground pixel:
+ *   bit 3 = column 0  (leftmost)
+ *   bit 2 = column 1
+ *   bit 1 = column 2
+ *   bit 0 = column 3  (rightmost)
+ *
+ * 256×8 = 2048 bytes vs 256×5×8 = 10240 bytes — 5× smaller working set
+ * → better D-cache hit rate during heavily-tiled redraws.
+ * -------------------------------------------------------------------- */
+static uint8_t s_glyph_mask[256][FONT_SRC_H];
 
 static const uint8_t nspire_font_data[256 * FONT_SRC_W * FONT_SRC_H] = {
 /* 0x00–0x1F  (control chars – all blank) */
@@ -1035,7 +1052,7 @@ EMPTY_GLYPH, EMPTY_GLYPH, EMPTY_GLYPH, EMPTY_GLYPH,
  * Internal helpers
  * -------------------------------------------------------------------- */
 
-/** Write one pixel into the framebuffer (bounds-checked in debug). */
+/** Write one pixel into the framebuffer (bounds-checked). */
 static inline void fb_put(int x, int y, nspire_pixel_t colour)
 {
     if ((unsigned)x < NSPIRE_SCREEN_W && (unsigned)y < NSPIRE_SCREEN_H)
@@ -1050,11 +1067,29 @@ void nspire_video_init(void)
 {
     lcd_init(SCR_320x240_565);
     memset(framebuf, 0, sizeof(framebuf));
+
+    /* Build compact glyph mask table from the byte-per-pixel font data.
+     * Row byte format: bit 3 = col 0, bit 2 = col 1, bit 1 = col 2,
+     *                  bit 0 = col 3.                                  */
+    for (int i = 0; i < 256; i++) {
+        const uint8_t *g = nspire_font_data + i * (FONT_SRC_W * FONT_SRC_H);
+        for (int gy = 0; gy < FONT_SRC_H; gy++) {
+            const uint8_t *row = g + gy * FONT_SRC_W;
+            s_glyph_mask[i][gy] = (uint8_t)(
+                (row[0] ? 0x08u : 0u) |
+                (row[1] ? 0x04u : 0u) |
+                (row[2] ? 0x02u : 0u) |
+                (row[3] ? 0x01u : 0u));
+        }
+    }
 }
 
 void nspire_video_flush(void)
 {
+    if (!s_framebuf_dirty)
+        return;
     lcd_blit(framebuf, SCR_320x240_565);
+    s_framebuf_dirty = false;
 }
 
 void nspire_clear(nspire_pixel_t colour)
@@ -1067,6 +1102,7 @@ void nspire_clear(nspire_pixel_t colour)
     uint32_t *end = p + (NSPIRE_SCREEN_W * NSPIRE_SCREEN_H / 2);
     while (p < end)
         *p++ = fill;
+    s_framebuf_dirty = true;
 }
 
 void nspire_draw_char(int col, int row, int c,
@@ -1075,31 +1111,59 @@ void nspire_draw_char(int col, int row, int c,
     if ((unsigned)c > 0xFF)
         c = 0x20;
 
-    const uint8_t *glyph = nspire_font_data
-                           + (unsigned)c * (FONT_SRC_W * FONT_SRC_H);
-
-    /* Compute the framebuffer destination pointer once for the whole cell.
-     * Stepping by NSPIRE_SCREEN_W each row avoids a multiply-per-pixel.
-     * The +1 matches the original pel offset that keeps column 0 clear of
-     * the left bezel.  col 79 therefore reaches x=320; the framebuf has one
-     * spare element allocated to absorb that write safely. */
+    /* Use the compact glyph mask (1 byte/row) rather than the 5-byte-per-row
+     * source table.  This is 5× smaller, fitting more glyphs in D-cache.
+     *
+     * No +1 bezel offset: cells exactly tile [0, 320).  This also keeps
+     * every cell 4-byte aligned, enabling safe 32-bit stores below. */
+    const uint8_t *mask = s_glyph_mask[(unsigned char)c];
     nspire_pixel_t *dst = framebuf
                           + row * NSPIRE_FONT_H * NSPIRE_SCREEN_W
-                          + col * NSPIRE_FONT_W + 1;
+                          + col * NSPIRE_FONT_W;
 
     for (int gy = 0; gy < FONT_SRC_H; gy++, dst += NSPIRE_SCREEN_W) {
-        /* Walk the 5-wide glyph row; only render the first 4 columns. */
-        const uint8_t *src = glyph + gy * FONT_SRC_W;
-        dst[0] = src[0] ? fg : bg;
-        dst[1] = src[1] ? fg : bg;
-        dst[2] = src[2] ? fg : bg;
-        dst[3] = src[3] ? fg : bg;
+        /* Each row fits in one byte; derive 4 pixel values from bits 3..0.
+         * Pack two adjacent pixels into one 32-bit store (ARM is LE):
+         *   low  16 bits → first  pixel (col+0)
+         *   high 16 bits → second pixel (col+1)
+         * Result: 2 stores per row instead of 4 — halves memory traffic. */
+        uint8_t m = mask[gy];
+        uint32_t p01 = (uint32_t)((m & 0x08) ? fg : bg)
+                     | ((uint32_t)((m & 0x04) ? fg : bg) << 16);
+        uint32_t p23 = (uint32_t)((m & 0x02) ? fg : bg)
+                     | ((uint32_t)((m & 0x01) ? fg : bg) << 16);
+        uint32_t *r = (uint32_t *)dst;
+        r[0] = p01;
+        r[1] = p23;
     }
+    s_framebuf_dirty = true;
 }
+
+void nspire_fill_cells(int col, int row, int ncols, nspire_pixel_t colour)
+{
+    /* Bulk-fill ncols terminal cells on the given row with a solid colour.
+     * Used by the Term_wipe hook to avoid the per-character overhead of
+     * nspire_draw_char when erasing spans of cells.
+     *
+     * Cell x=col is at pixel col*4; all positions are 4-byte aligned so
+     * 32-bit stores are safe (framebuf is statically 4-byte aligned and
+     * col*NSPIRE_FONT_W is always divisible by 2 uint16_t units). */
+    uint32_t fill32 = (uint32_t)colour | ((uint32_t)colour << 16);
+    int width_px    = ncols * NSPIRE_FONT_W;    /* multiple of 4 */
+    int base_idx    = row * NSPIRE_FONT_H * NSPIRE_SCREEN_W + col * NSPIRE_FONT_W;
+
+    for (int gy = 0; gy < NSPIRE_FONT_H; gy++) {
+        uint32_t *r = (uint32_t *)(framebuf + base_idx + gy * NSPIRE_SCREEN_W);
+        for (int i = 0; i < width_px / 2; i++)
+            r[i] = fill32;
+    }
+    s_framebuf_dirty = true;
+}
+
 
 void nspire_draw_cursor(int col, int row)
 {
-    int px0 = col  * NSPIRE_FONT_W + 1;   /* +1: left bezel offset */
+    int px0 = col  * NSPIRE_FONT_W;
     int py0 = row  * NSPIRE_FONT_H;
     int px1 = px0  + NSPIRE_FONT_W - 1;
     int py1 = py0  + NSPIRE_FONT_H - 1;
@@ -1118,6 +1182,7 @@ void nspire_draw_cursor(int col, int row)
         r[0]  = NSPIRE_CURSOR;   /* left edge  */
         r[px1 - px0] = NSPIRE_CURSOR;   /* right edge */
     }
+    s_framebuf_dirty = true;
 }
 
 void nspire_log(const char *msg)
