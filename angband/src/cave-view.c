@@ -441,6 +441,8 @@ static void mark_wasseen(struct chunk *c)
 			struct loc grid = loc(x, y);
 			if (square_isseen(c, grid))
 				sqinfo_on(square(c, grid)->info, SQUARE_WASSEEN);
+			else
+				sqinfo_off(square(c, grid)->info, SQUARE_WASSEEN);
 			sqinfo_off(square(c, grid)->info, SQUARE_VIEW);
 			sqinfo_off(square(c, grid)->info, SQUARE_SEEN);
 			sqinfo_off(square(c, grid)->info, SQUARE_CLOSE_PLAYER);
@@ -655,10 +657,27 @@ static void calc_lighting(struct chunk *c, struct player *p)
 	int dir, k, x, y;
 	int light = p->state.cur_light, radius = ABS(light) - 1;
 	int old_light = square_light(c, p->grid);
+	int y0, y1, x0, x1, sight;
+
+	/*
+	 * Restrict lighting calculation to the player's visible area.
+	 * The full-dungeon scan was the single biggest CPU sink on every
+	 * update_view() call, because glow_can_light_wall() is expensive
+	 * and was called for every lit wall in the dungeon regardless of
+	 * how far it is from the player.  Squares outside max_sight are
+	 * never reached by update_view_one(), so their light values don't
+	 * affect gameplay.  Use max_sight+2 as margin for wall-adjacent
+	 * bright-terrain spill and the wall-stealing LOS shift.
+	 */
+	sight = z_info->max_sight;
+	y0 = p->grid.y - sight - 2; if (y0 < 0) y0 = 0;
+	y1 = p->grid.y + sight + 2; if (y1 >= c->height) y1 = c->height - 1;
+	x0 = p->grid.x - sight - 2; if (x0 < 0) x0 = 0;
+	x1 = p->grid.x + sight + 2; if (x1 >= c->width) x1 = c->width - 1;
 
 	/* Starting values based on permanent light */
-	for (y = 0; y < c->height; y++) {
-		for (x = 0; x < c->width; x++) {
+	for (y = y0; y <= y1; y++) {
+		for (x = x0; x <= x1; x++) {
 			struct loc grid = loc(x, y);
 
 			if (square_isglow(c, grid) &&
@@ -871,6 +890,7 @@ static void update_one(struct chunk *c, struct loc grid, struct player *p)
 void update_view(struct chunk *c, struct player *p)
 {
 	int x, y;
+	int y0, y1, x0, x1, sight;
 
 	/* Record the current view */
 	mark_wasseen(c);
@@ -896,14 +916,30 @@ void update_view(struct chunk *c, struct player *p)
 		square_forget(c, p->grid);
 	}
 
+	/*
+	 * Restrict both passes to a bounding box of max_sight+1 around the
+	 * player.  update_view_one() already skips grids with d>max_sight,
+	 * but eliminating those iterations avoids the distance() call and
+	 * function-call overhead for the vast majority of dungeon cells.
+	 * Using +1 as margin catches wall squares whose LOS is proxied from
+	 * the adjacent floor cell one step closer to the player, and also
+	 * squares that just stepped out of view after a single-step move so
+	 * that update_one() can issue the required square_light_spot() call.
+	 */
+	sight = z_info->max_sight;
+	y0 = p->grid.y - sight - 1; if (y0 < 0) y0 = 0;
+	y1 = p->grid.y + sight + 1; if (y1 >= c->height) y1 = c->height - 1;
+	x0 = p->grid.x - sight - 1; if (x0 < 0) x0 = 0;
+	x1 = p->grid.x + sight + 1; if (x1 >= c->width) x1 = c->width - 1;
+
 	/* Squares we have LOS to get marked as in the view, and perhaps seen */
-	for (y = 0; y < c->height; y++)
-		for (x = 0; x < c->width; x++)
+	for (y = y0; y <= y1; y++)
+		for (x = x0; x <= x1; x++)
 			update_view_one(c, loc(x, y), p);
 
 	/* Update each grid */
-	for (y = 0; y < c->height; y++)
-		for (x = 0; x < c->width; x++)
+	for (y = y0; y <= y1; y++)
+		for (x = x0; x <= x1; x++)
 			update_one(c, loc(x, y), p);
 }
 

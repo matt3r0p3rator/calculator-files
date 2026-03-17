@@ -20,7 +20,9 @@
 /* -----------------------------------------------------------------------
  * Software framebuffer
  * -------------------------------------------------------------------- */
-static nspire_pixel_t framebuf[NSPIRE_SCREEN_W * NSPIRE_SCREEN_H];
+/* One extra element absorbs the harmless out-of-bounds write that occurs
+ * when drawing col 79 with the +1 screen-edge offset (x reaches 320). */
+static nspire_pixel_t framebuf[NSPIRE_SCREEN_W * NSPIRE_SCREEN_H + 1];
 
 /* -----------------------------------------------------------------------
  * Embedded 5×8 bitmap font (ASCII 0x00–0xFF)
@@ -1057,48 +1059,64 @@ void nspire_video_flush(void)
 
 void nspire_clear(nspire_pixel_t colour)
 {
-    for (int i = 0; i < NSPIRE_SCREEN_W * NSPIRE_SCREEN_H; i++)
-        framebuf[i] = colour;
+    /* Fill as 32-bit pairs — twice the throughput of a 16-bit loop on
+     * the ARM926EJ-S.  The framebuffer size is always a multiple of 4
+     * bytes so this is safe. */
+    uint32_t fill = (uint32_t)colour | ((uint32_t)colour << 16);
+    uint32_t *p   = (uint32_t *)framebuf;
+    uint32_t *end = p + (NSPIRE_SCREEN_W * NSPIRE_SCREEN_H / 2);
+    while (p < end)
+        *p++ = fill;
 }
 
 void nspire_draw_char(int col, int row, int c,
                       nspire_pixel_t fg, nspire_pixel_t bg)
 {
-    /* Clamp to printable ASCII; treat anything outside 0x20–0x7E as space */
     if ((unsigned)c > 0xFF)
         c = 0x20;
 
     const uint8_t *glyph = nspire_font_data
                            + (unsigned)c * (FONT_SRC_W * FONT_SRC_H);
 
-    int px0 = col * NSPIRE_FONT_W + 1;
-    int py0 = row * NSPIRE_FONT_H;
+    /* Compute the framebuffer destination pointer once for the whole cell.
+     * Stepping by NSPIRE_SCREEN_W each row avoids a multiply-per-pixel.
+     * The +1 matches the original pel offset that keeps column 0 clear of
+     * the left bezel.  col 79 therefore reaches x=320; the framebuf has one
+     * spare element allocated to absorb that write safely. */
+    nspire_pixel_t *dst = framebuf
+                          + row * NSPIRE_FONT_H * NSPIRE_SCREEN_W
+                          + col * NSPIRE_FONT_W + 1;
 
-    for (int row_y = 0; row_y < FONT_SRC_H; row_y++) {
-        for (int col_x = 0; col_x < NSPIRE_FONT_W; col_x++) {
-            /* Index into 5-wide glyph data, use only first 4 columns */
-            uint8_t pixel = glyph[row_y * FONT_SRC_W + col_x];
-            fb_put(px0 + col_x, py0 + row_y, pixel ? fg : bg);
-        }
+    for (int gy = 0; gy < FONT_SRC_H; gy++, dst += NSPIRE_SCREEN_W) {
+        /* Walk the 5-wide glyph row; only render the first 4 columns. */
+        const uint8_t *src = glyph + gy * FONT_SRC_W;
+        dst[0] = src[0] ? fg : bg;
+        dst[1] = src[1] ? fg : bg;
+        dst[2] = src[2] ? fg : bg;
+        dst[3] = src[3] ? fg : bg;
     }
 }
 
 void nspire_draw_cursor(int col, int row)
 {
-    int px0 = col * NSPIRE_FONT_W + 1;
-    int py0 = row * NSPIRE_FONT_H;
-    int px1 = px0 + NSPIRE_FONT_W - 1;
-    int py1 = py0 + NSPIRE_FONT_H - 1;
+    int px0 = col  * NSPIRE_FONT_W + 1;   /* +1: left bezel offset */
+    int py0 = row  * NSPIRE_FONT_H;
+    int px1 = px0  + NSPIRE_FONT_W - 1;
+    int py1 = py0  + NSPIRE_FONT_H - 1;
 
-    /* Top / bottom horizontal bars */
-    for (int x = px0; x <= px1; x++) {
-        fb_put(x, py0, NSPIRE_CURSOR);
-        fb_put(x, py1, NSPIRE_CURSOR);
-    }
-    /* Left / right vertical bars */
-    for (int y = py0; y <= py1; y++) {
-        fb_put(px0, y, NSPIRE_CURSOR);
-        fb_put(px1, y, NSPIRE_CURSOR);
+    /* Top row */
+    nspire_pixel_t *top = framebuf + py0 * NSPIRE_SCREEN_W + px0;
+    top[0] = top[1] = top[2] = top[3] = NSPIRE_CURSOR;
+
+    /* Bottom row */
+    nspire_pixel_t *bot = framebuf + py1 * NSPIRE_SCREEN_W + px0;
+    bot[0] = bot[1] = bot[2] = bot[3] = NSPIRE_CURSOR;
+
+    /* Left / right vertical bars (skip corners already set) */
+    for (int y = py0 + 1; y < py1; y++) {
+        nspire_pixel_t *r = framebuf + y * NSPIRE_SCREEN_W + px0;
+        r[0]  = NSPIRE_CURSOR;   /* left edge  */
+        r[px1 - px0] = NSPIRE_CURSOR;   /* right edge */
     }
 }
 

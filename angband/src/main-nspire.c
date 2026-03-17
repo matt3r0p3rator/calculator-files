@@ -163,8 +163,9 @@ static errr Term_xtra_nspire(int n, int v)
         return 0;
 
     case TERM_XTRA_FROSH:
-        /* Row has been fully drawn; flush now so it's visible */
-        nspire_video_flush();
+        /* Row finished; actual LCD blit is deferred to TERM_XTRA_FRESH so
+         * we only call the expensive lcd_blit() once per full frame instead
+         * of 30 times (once per row). */
         return 0;
 
     case TERM_XTRA_FRESH:
