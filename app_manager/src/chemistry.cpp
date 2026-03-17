@@ -123,15 +123,18 @@ HeatColor getSmoothHeatmapColor(double val, double min_val, double max_val) {
     if (ratio < 0.0) ratio = 0.0;
     if (ratio > 1.0) ratio = 1.0;
     
+    // Full spectrum: blue (low) -> cyan -> green -> yellow -> red (high)
+    double hue = (1.0 - ratio) * 240.0;
+    int hi = (int)(hue / 60.0) % 6;
+    double f = (hue / 60.0) - (int)(hue / 60.0);
     Uint8 r, g, b;
-    if (ratio <= 0.5) {
-        r = 255;
-        g = (Uint8)(ratio * 2.0 * 255.0);
-        b = 0;
-    } else {
-        r = (Uint8)((1.0 - ratio) * 2.0 * 255.0);
-        g = 255;
-        b = 0;
+    switch(hi) {
+        case 0: r=255; g=(Uint8)(f*255); b=0; break;
+        case 1: r=(Uint8)((1.0-f)*255); g=255; b=0; break;
+        case 2: r=0; g=255; b=(Uint8)(f*255); break;
+        case 3: r=0; g=(Uint8)((1.0-f)*255); b=255; break;
+        case 4: r=(Uint8)(f*255); g=0; b=255; break;
+        default: r=255; g=0; b=(Uint8)((1.0-f)*255); break;
     }
     double brightness = 0.299 * r + 0.587 * g + 0.114 * b;
     bool is_dark = (brightness < 128);
@@ -377,12 +380,27 @@ void ChemistryApp::run(TIGui& gui) {
                         }
                     }
                 }
-                // Legend
-                gui.drawText(10, 215, "Low ", COLOR_RED);
-                gui.drawText(50, 215, "->", COLOR_BLACK);
-                gui.drawText(75, 215, "->", COLOR_BLACK);
-                gui.drawText(100, 215, "->", COLOR_BLACK);
-                gui.drawText(125, 215, "High", COLOR_GREEN);
+                // Legend: full spectrum gradient bar (blue=low -> cyan -> green -> yellow -> red=high)
+                gui.drawText(5, 213, "Lo", COLOR_BLACK);
+                int bar_x = 24, bar_y = 212, bar_w = 220, bar_h = 10;
+                for (int bx = 0; bx < bar_w; bx++) {
+                    double br = (double)bx / (bar_w - 1);
+                    double bh = (1.0 - br) * 240.0;
+                    int bhi = (int)(bh / 60.0) % 6;
+                    double bf = (bh / 60.0) - (int)(bh / 60.0);
+                    Uint8 lr, lg, lb;
+                    switch(bhi) {
+                        case 0: lr=255; lg=(Uint8)(bf*255); lb=0; break;
+                        case 1: lr=(Uint8)((1.0-bf)*255); lg=255; lb=0; break;
+                        case 2: lr=0; lg=255; lb=(Uint8)(bf*255); break;
+                        case 3: lr=0; lg=(Uint8)((1.0-bf)*255); lb=255; break;
+                        case 4: lr=(Uint8)(bf*255); lg=0; lb=255; break;
+                        default: lr=255; lg=0; lb=(Uint8)((1.0-bf)*255); break;
+                    }
+                    gui.fillRectRGB(bar_x + bx, bar_y, 1, bar_h, lr, lg, lb);
+                }
+                gui.drawRect(bar_x, bar_y, bar_w, bar_h, COLOR_DARK_GRAY);
+                gui.drawText(bar_x + bar_w + 3, 213, "Hi", COLOR_BLACK);
                 
                 gui.drawBottomBar("DPad: Select | ESC/TAB: Back to Details");
             } else if (state1 == TREND_SCATTER_OPTIONS) {

@@ -79,7 +79,7 @@ void GaussApp::run(TIGui& gui) {
             char title[50];
             sprintf(title, "Matrix Input (%dx%d)", num_rows, num_cols);
             gui.drawTopBar(title);
-            gui.drawText(10, 25, "Use numbers, [-], [.]", COLOR_DARK_GRAY);
+            gui.drawText(10, 25, "Use numbers, [-], [TAB] for next cell", COLOR_DARK_GRAY);
             
             // Calculte sizes to fit on screen
             int cell_w = std::min(70, 310 / num_cols);
@@ -131,7 +131,15 @@ void GaussApp::run(TIGui& gui) {
                         if (cursor_c > 0) cursor_c--;
                     } else if (sym == SDLK_RIGHT || sym == SDLK_KP6) {
                         if (cursor_c < num_cols - 1) cursor_c++;
-                    } else if (sym == SDLK_RETURN || sym == SDLK_KP_ENTER) {
+                    } else if (sym = SDLK_TAB) {
+                        if (cursor_c < num_cols - 1) {
+                            cursor_c++;
+                        } else if (cursor_r < num_rows - 1) {
+                            cursor_c = 0;
+                            cursor_r++;
+                        }
+                    }
+                     else if (sym == SDLK_RETURN || sym == SDLK_KP_ENTER) {
                         vector<vector<double>> init_mat(num_rows, vector<double>(num_cols, 0.0));
                         for (int r = 0; r < num_rows; r++) {
                             for (int c = 0; c < num_cols; c++) {
@@ -178,7 +186,7 @@ void GaussApp::run(TIGui& gui) {
             sprintf(prog, "Step %d of %d", current_step + 1, (int)steps.size());
             gui.drawText(10, y + 10, string(prog), COLOR_DARK_GRAY);
             
-            gui.drawBottomBar(" LEFT/RIGHT: Step  |  ESC: Back to Grid");
+            gui.drawBottomBar(" LEFT/RIGHT/TAB: Step  |  ESC: Back to Grid");
             gui.render();
             
             SDL_Event event;
@@ -190,7 +198,10 @@ void GaussApp::run(TIGui& gui) {
                     } else if (event.key.keysym.sym == SDLK_LEFT || event.key.keysym.sym == SDLK_UP || 
                                event.key.keysym.sym == SDLK_KP4 || event.key.keysym.sym == SDLK_KP8) {
                         if (current_step > 0) current_step--;
-                    } else if (event.key.keysym.sym == SDLK_ESCAPE) {
+                    } else if (event.key.keysym.sym == SDLK_TAB) {
+                        if (current_step < (int)steps.size() - 1) current_step++;
+                    }
+                     else if (event.key.keysym.sym == SDLK_ESCAPE) {
                         state = STATE_INPUT;
                     }
                 }
