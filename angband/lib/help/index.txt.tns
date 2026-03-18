@@ -1,0 +1,24 @@
+This is a short in-game reference to available commands and the symbols
+you might encounter in-game.  For more detailed help, please see:
+
+   https://angband.readthedocs.io/en/latest/
+
+
+Please choose one of the following help files:
+
+    (a) Available commands
+    (b) Available symbols
+
+
+
+
+Browser/help commands:
+  #     go to line         %  go to file         ?  go to last file/main menu
+  Space advance 1 page     -  back up 1 page     /  search for text
+  Enter advance 1 line     =  back up 1 line     &  show (highlight) some text
+  +     advance 1/2 page   _  back up 1/2 page   !  toggle case sensitivity
+  (TI-Nspire: + = plus key; - = minus key; _ = shift+minus; = = equals key)
+
+.. menu:: [a] commands.txt
+
+.. menu:: [b] symbols.txt

@@ -621,12 +621,12 @@ static void clear_question(void)
 
 #define BIRTH_MENU_HELPTEXT \
 	"{light blue}Please select your character traits from the menus below:{/}\n\n" \
-	"Use the {light green}movement keys{/} to scroll the menu, " \
-	"{light green}Enter{/} to select the current menu item, '{light green}*{/}' " \
-	"for a random menu item, '{light green}@{/}' to finish the character with random selections, " \
-	"'{light green}ESC{/}' to step back through the birth process, " \
+	"Use the {light green}arrow keys{/} to scroll the menu, " \
+	"{light green}Enter{/} to select the current menu item, '{light green}*{/}' (shift+8) " \
+	"for a random menu item, '{light green}@{/}' (shift+2) to finish the character with random selections, " \
+	"'{light green}Esc{/}' to step back through the birth process, " \
 	"'{light green}={/}' for the birth options, '{light green}?{/}' " \
-	"for help, or '{light green}Ctrl-X{/}' to quit."
+	"for help, or '{light green}ctrl+X{/}' to quit."
 
 /**
  * Show the birth instructions on an otherwise blank screen
@@ -896,7 +896,7 @@ static enum birth_stage roller_command(bool first_call)
 	strnfcat(prompt, sizeof (prompt), &promptlen, "['r' to reroll");
 	if (prev_roll) 
 		strnfcat(prompt, sizeof(prompt), &promptlen, ", 'p' for previous roll");
-	strnfcat(prompt, sizeof (prompt), &promptlen, " or 'Enter' to accept]");
+	strnfcat(prompt, sizeof (prompt), &promptlen, " or Enter to accept]");
 
 	/* Prompt for it */
 	prt(prompt, Term->hgt - 1, Term->wid / 2 - promptlen / 2);
@@ -1566,7 +1566,7 @@ static enum birth_stage get_history_command(void)
  * ------------------------------------------------------------------------ */
 static enum birth_stage get_confirm_command(void)
 {
-	const char *prompt = "['ESC' to step back, 'S' to start over, or any other key to continue]";
+	const char *prompt = "['Esc' to step back, 'S' to start over, or any other key to continue]";
 	struct keypress ke;
 
 	enum birth_stage next = BIRTH_RESET;

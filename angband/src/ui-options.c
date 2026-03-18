@@ -329,7 +329,7 @@ static void option_toggle_menu(const char *name, int page)
 	struct menu *m = menu_new(MN_SKIN_SCROLL, &option_toggle_iter);
 
 	/* for all menus */
-	m->prompt = "Set option (y/n/t), select with movement keys or index";
+	m->prompt = "Set option (y/n/t), select with arrow keys or index";
 	m->cmd_keys = "YyNnTt";
 	m->selections = selections;
 	m->flags = MN_DBL_TAP;
@@ -402,7 +402,7 @@ static void do_cmd_options_win(const char *name, int row)
 	/* Interact */
 	while (1) {
 		/* Prompt */
-		prt("Window flags (<dir> to move, 't'/Enter to toggle, or ESC)", 0, 0);
+		prt("Window flags (arrow keys to move, 't'/Enter to toggle, or Esc)", 0, 0);
 
 		/* Display the windows */
 		for (j = 0; j < ANGBAND_TERM_MAX; j++) {
@@ -1277,7 +1277,7 @@ static void options_load_pref_file(const char *n, int row)
  * ------------------------------------------------------------------------ */
 
 #define EGO_MENU_HELPTEXT \
-"{light green}Movement keys{/} scroll the list\n{light red}ESC{/} returns to the previous menu\n{light blue}Enter{/} toggles the current setting."
+"{light green}Arrow keys{/} scroll the list\n{light red}Esc{/} returns to the previous menu\n{light blue}Enter{/} toggles the current setting."
 
 /**
  * Skip common prefixes in ego-item names.

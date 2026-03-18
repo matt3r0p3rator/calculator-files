@@ -69,7 +69,8 @@ directions are reachable from the touchpad.
 
 ## Punctuation & Symbols
 
-All printable ASCII (32–126) is accessible.
+All printable ASCII (32–126) is accessible on the CX II **except** `"` which
+requires the ctrl+`'` combo described below.
 
 | Nspire Key    | Normal | Shift | Notes                                |
 |---------------|--------|-------|--------------------------------------|
@@ -83,14 +84,18 @@ All printable ASCII (32–126) is accessible.
 | `×` (multiply)| `*`    | `\|`  |                                      |
 | `=` (equals)  | `=`    | `+`   |                                      |
 | `^` (EXP)     | `^`    | `~`   | `~` opens knowledge browser          |
-| `?` (ques)    | `?`    | `?`   |                                      |
-| `:` (colon)   | `:`    | `;`   |                                      |
-| `"` (quote)   | `"`    | `'`   |                                      |
+| `?` (Doc key) | `?`    | `?`   | Doc key on CX II                     |
+| `?!` key      | `:`    | `;`   | CX II only — `:` take notes, `;` walk|
 | `'` (apostrophe)| `'`  | `` ` ``|                                    |
 | `\|` (bar)    | `\|`   | `\`   |                                      |
-| `>` (GTHAN)   | `>`    | `}`   |                                      |
-| `<` (LTHAN)   | `<`    | `{`   |                                      |
-| `(-)` (negative sign) | `-` | `_` | Duplicate of minus key           |
+| `(-)` (neg)   | `-`    | `_`   | Duplicate of minus key               |
+
+> **Note:** The classic Nspire had dedicated `?`, `:`, `"`, `<`, `>` keys
+> that **do not exist on the CX II**. Their functions are remapped:
+> - `:` and `;` → the `?!` key (`KEY_NSPIRE_QUESEXCL`, CX II only)
+> - `{` (inscribe) → `ctrl+(` 
+> - `}` (uninscribe) → `ctrl+)`
+> - `"` (user pref) → `ctrl+'`
 
 ---
 
@@ -113,18 +118,23 @@ All printable ASCII (32–126) is accessible.
 | Fire missile               | `f`                                 |
 | Cast spell                 | `m`                                 |
 | Look around                | `l`                                 |
-| Help                       | `?` or `doc`                        |
+| Help                       | `?` (Doc key)                       |
 | Knowledge browser          | shift+`^` (sends `~`)               |
 | Character screen           | `C`                                 |
-| Save & quit                | `Ctrl`+`X`                          |
-| Save game                  | `Ctrl`+`S`                          |
+| Save & quit                | `ctrl`+`X`                          |
+| Save game                  | `ctrl`+`S`                          |
 | Stairs (go down/up)        | `>` (shift+`.`) / `<` (shift+`,`)   |
 | Open door                  | `o`                                 |
 | Close door                 | `c`                                 |
 | Tunnel                     | `T` (shift+`t`)                     |
 | Search                     | `s`                                 |
 | Run                        | `.` then a direction                |
-| Target                     | `*`  (shift+`8`)                    |
+| Target                     | `*` (shift+`8` or `×` key)          |
+| Inscribe object            | `{` → `ctrl+(`                      |
+| Uninscribe object          | `}` → `ctrl+)`                      |
+| Take notes                 | `:` → `?!` key (unshifted)          |
+| Walk with pickup           | `;` → `?!` key (shifted)            |
+| User pref command          | `"` → `ctrl+'`                      |
 | Escape / cancel            | `esc`                               |
 
 ---

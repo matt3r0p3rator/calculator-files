@@ -135,16 +135,18 @@ static const key_entry_t s_key_table[] = {
     { &KEY_NSPIRE_MULTIPLY,    '*',  '|',  false },
     { &KEY_NSPIRE_EQU,         '=',  '+',  false },
     { &KEY_NSPIRE_EXP,         '^',  '~',  false }, /* shift+EXP → ~ (only missing ASCII) */
-    /* Dedicated punctuation keys (bypass the OS special-key menu) */
-    { &KEY_NSPIRE_QUES,        '?',  '?',  false },
-    { &KEY_NSPIRE_DOC,         '?',  '?',  false }, /* doc key → ? */
-    { &KEY_NSPIRE_COLON,       ':',  ';',  false },
-    { &KEY_NSPIRE_QUOTE,       '"',  '\'' ,false },
+    /* Dedicated punctuation keys */
+    /* KEY_NSPIRE_QUES is classic-only; Doc key below handles '?' on CX II */
+    { &KEY_NSPIRE_DOC,         '?',  '?',  false }, /* doc key → ? (CX II only) */
+    /* KEY_NSPIRE_COLON is classic-only; use QUESEXCL (CX-only) for : and ; */
+    { &KEY_NSPIRE_QUESEXCL,    ':',  ';',  false }, /* CX-only key → : / ; */
+    /* KEY_NSPIRE_QUOTE is classic-only; " is produced by ctrl+' (see below) */
     { &KEY_NSPIRE_APOSTROPHE,  '\'' ,'`',  false },
     { &KEY_NSPIRE_BAR,         '|',  '\\', false },
-    { &KEY_NSPIRE_GTHAN,       '>',  '}',  false },
-    { &KEY_NSPIRE_LTHAN,       '<',  '{',  false },
-    { &KEY_NSPIRE_NEGATIVE,    '-',  '_',  false },
+    /* KEY_NSPIRE_GTHAN / KEY_NSPIRE_LTHAN are classic-only.
+     * '>' is still available as shift+PERIOD; '<' as shift+COMMA.
+     * '{' and '}' are remapped to ctrl+( and ctrl+) below. */
+    { &KEY_NSPIRE_NEGATIVE,    '-',  '_',  false }, /* (−) key, same as MINUS */
 
     /* Arrow keys → Angband ARROW_* codes (work in menus AND movement) */
     { &KEY_NSPIRE_UP,       ARROW_UP,    ARROW_UP,    true  },
@@ -264,6 +266,20 @@ void nspire_input_scan(void)
             } else if ((hw_mods & HW_MOD_CTRL) && raw >= 'A' && raw <= 'Z') {
                 code = (keycode_t)(raw - 'A' + 1);
                 mods &= ~KC_MOD_SHIFT;
+            }
+            /* CX II accessibility: ctrl+( → '{', ctrl+) → '}', ctrl+' → '"'
+             * These provide Angband's inscribe, uninscribe, and user-pref
+             * commands whose normal keys (< > : colon quote) don't exist on
+             * the CX II hardware. */
+            else if ((hw_mods & HW_MOD_CTRL) && raw == '(') {
+                code = '{';
+                mods &= ~KC_MOD_CONTROL;
+            } else if ((hw_mods & HW_MOD_CTRL) && raw == ')') {
+                code = '}';
+                mods &= ~KC_MOD_CONTROL;
+            } else if ((hw_mods & HW_MOD_CTRL) && raw == '\'') {
+                code = '"';
+                mods &= ~KC_MOD_CONTROL;
             }
 
             nspire_event_put_key(code, mods);

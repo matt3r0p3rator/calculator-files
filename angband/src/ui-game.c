@@ -54,6 +54,7 @@
 #include "ui-player.h"
 #include "ui-prefs.h"
 #include "ui-spell.h"
+#include "score.h"
 #include "ui-score.h"
 #include "ui-signals.h"
 #include "ui-spoil.h"
@@ -675,6 +676,9 @@ static void pre_turn_refresh(void)
 	Term_activate(old);
 }
 
+/* Forward declaration for use in start_game() */
+static void write_alive_score_sidecar(const char *spath);
+
 /**
  * Start actually playing a game, either by loading a savefile or creating
  * a new character
@@ -710,11 +714,16 @@ static bool start_game(bool new_game)
 		}
 	}
 	safe_setuid_grab();
-	exists = file_exists(loadpath);
+	exists = loadpath[0] && file_exists(loadpath);
 	safe_setuid_drop();
 	if (exists && !savefile_load(loadpath, arg_wizard)) {
 		return false;
 	}
+
+	/* Cache a score sidecar for this character so the Hall of Fame can
+	 * show them even before the next in-game save. */
+	if (exists && !player->is_dead)
+		write_alive_score_sidecar(loadpath);
 
 	/* No living character loaded */
 	if (player->is_dead || new_game) {
@@ -744,6 +753,9 @@ static bool start_game(bool new_game)
 
 	return true;
 }
+
+/* Forward declaration so select_savefile() can use it. */
+static void alive_score_sidecar_path(char *buf, size_t len, const char *spath);
 
 /**
  * Help select_savefile():  clean up the array of strings
@@ -958,6 +970,14 @@ static void select_savefile(bool retry, bool *new_game)
 					path_build(full_path, sizeof(full_path),
 						ANGBAND_DIR_SAVE, names[idx]);
 					file_delete(full_path);
+					/* Also delete the .pts sidecar if present */
+					char pts_path[1024];
+					alive_score_sidecar_path(pts_path,
+						sizeof(pts_path), full_path);
+					safe_setuid_grab();
+					if (file_exists(pts_path))
+						file_delete(pts_path);
+					safe_setuid_drop();
 					/* Rebuild the whole menu from disk */
 					menu_free(m);
 					cleanup_savefile_selection_strings(
@@ -1106,6 +1126,52 @@ bool savefile_name_already_used(const char *fname, bool make_safe,
 }
 
 /**
+ * Build the path for an alive-character score sidecar file.
+ */
+static void alive_score_sidecar_path(char *buf, size_t len,
+		const char *spath)
+{
+	strnfmt(buf, len, "%s.pts.tns", spath);
+}
+
+/**
+ * Write a score sidecar alongside a save file for an alive character.
+ * Called after every successful save so the Hall of Fame can include
+ * characters that are still playing.
+ */
+static void write_alive_score_sidecar(const char *spath)
+{
+	struct high_score entry;
+	char pts_path[1024];
+	ang_file *f;
+
+	alive_score_sidecar_path(pts_path, sizeof(pts_path), spath);
+	build_score(&entry, player, "still alive", NULL);
+
+	safe_setuid_grab();
+	f = file_open(pts_path, MODE_WRITE, FTYPE_RAW);
+	safe_setuid_drop();
+	if (!f) return;
+	file_write(f, (char *)&entry, sizeof(entry));
+	file_close(f);
+}
+
+/**
+ * Delete the score sidecar when a character dies.
+ * Their score is entered into scores.raw instead.
+ */
+static void delete_alive_score_sidecar(const char *spath)
+{
+	char pts_path[1024];
+
+	alive_score_sidecar_path(pts_path, sizeof(pts_path), spath);
+	safe_setuid_grab();
+	if (file_exists(pts_path))
+		file_delete(pts_path);
+	safe_setuid_drop();
+}
+
+/**
  * Save the game.
  */
 void save_game(void)
@@ -1148,6 +1214,7 @@ bool save_game_checked(void)
 	if (savefile_save(savefile)) {
 		prt("Saving game... done.", 0, 0);
 		result = true;
+		write_alive_score_sidecar(savefile);
 	} else {
 		prt("Saving game... failed!", 0, 0);
 		result = false;
@@ -1235,6 +1302,8 @@ void close_game(bool prompt_failed_save)
 				event_signal(EVENT_MESSAGE_FLUSH);
 			}
 		}
+		/* Score is now in scores.raw; remove the alive sidecar */
+		delete_alive_score_sidecar(savefile);
 	} else {
 		/* Save the game */
 		while (prompting && !save_game_checked()) {
@@ -1247,7 +1316,7 @@ void close_game(bool prompt_failed_save)
 		if (Term->mapped_flag) {
 			struct keypress ch;
 
-			prt("Press Return (or Escape).", 0, 40);
+			prt("Press Enter (or Esc).", 0, 40);
 			ch = inkey();
 			if (ch.code != ESCAPE)
 				predict_score(false);
@@ -1332,6 +1401,11 @@ bool got_savefile(savefile_getter *pg)
 			continue;
 		}
 #endif
+
+		/* Skip .pts.tns sidecar score files — they aren't save files. */
+		if (suffix(fname, ".pts.tns")) {
+			continue;
+		}
 
 		path_build(path, sizeof(path), ANGBAND_DIR_SAVE, fname);
 		desc = savefile_get_description(path);

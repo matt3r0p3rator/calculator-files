@@ -5,3 +5,6 @@ SRCDIR=/home/matt3r/calculator-files/angband/src
 
 make -C "$SRCDIR" -f Makefile.nspire clean
 make -C "$SRCDIR" -f Makefile.nspire && echo "=== BUILD SUCCESS: angband.tns ===" || echo "=== BUILD FAILED ==="
+if [ -f "$SRCDIR/angband.tns" ]; then
+    cp "$SRCDIR/angband.tns" .
+fi

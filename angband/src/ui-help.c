@@ -336,13 +336,13 @@ bool show_file(const char *name, const char *what, int line, int mode)
 		/* Prompt */
 		if (menu) {
 			/* Menu screen */
-			prt("[Press a Letter, or ESC to exit.]", hgt - 1, 0);
+			prt("[Press a Letter, or Esc to exit.]", hgt - 1, 0);
 		} else if (size <= hgt - 4) {
 			/* Small files */
-			prt("[Press ESC to exit.]", hgt - 1, 0);
+			prt("[Press Esc to exit.]", hgt - 1, 0);
 		} else {
 			/* Large files */
-			prt("[Press Space to advance, or ESC to exit.]", hgt - 1, 0);
+			prt("[Press Space to advance, or Esc to exit.]", hgt - 1, 0);
 		}
 
 		/* Get a keypress */

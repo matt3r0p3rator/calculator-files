@@ -17,8 +17,14 @@
  */
 #include "angband.h"
 #include "buildid.h"
+#include "cave.h"
 #include "game-world.h"
+#include "init.h"
+#include "mon-make.h"
+#include "player-birth.h"
+#include "savefile.h"
 #include "score.h"
+#include "z-file.h"
 #include "ui-input.h"
 #include "ui-output.h"
 #include "ui-score.h"
@@ -80,13 +86,23 @@ static void display_score_page(const struct high_score scores[], int start,
 		c_put_str(attr, out_val, n * 4 + 2, 0);
 
 
-		/* Died where? */
-		if (!cdun)
-			strnfmt(out_val, sizeof(out_val), "Killed by %s in the town",
-					score->how);
-		else
-			strnfmt(out_val, sizeof(out_val),
-					"Killed by %s on dungeon level %d", score->how, cdun);
+		/* Location or cause of death */
+		if (streq(score->how, "still alive")) {
+			if (!cdun)
+				strnfmt(out_val, sizeof(out_val),
+						"Still alive in the town");
+			else
+				strnfmt(out_val, sizeof(out_val),
+						"Still alive on dungeon level %d", cdun);
+		} else {
+			if (!cdun)
+				strnfmt(out_val, sizeof(out_val),
+						"Killed by %s in the town", score->how);
+			else
+				strnfmt(out_val, sizeof(out_val),
+						"Killed by %s on dungeon level %d",
+						score->how, cdun);
+		}
 
 		/* Append a "maximum level" */
 		if (mdun > cdun)
@@ -154,9 +170,9 @@ static void display_scores_aux(const struct high_score scores[], int from,
 
 		/* Wait for response; prompt centered on 80 character line */
 		if (allow_scrolling) {
-			prt("[Press ESC to exit, up for prior page, any other key for next page.]", 23, 6);
+				prt("[Press Esc to exit, arrow-up for prior page, any other key for next page.]", 23, 6);
 		} else {
-			prt("[Press ESC to exit, any other key to page forward till done.]", 23, 9);
+				prt("[Press Esc to exit, any other key to page forward till done.]", 23, 9);
 		}
 		ch = inkey();
 		prt("", 23, 0);
@@ -216,6 +232,59 @@ void predict_score(bool allow_scrolling)
 
 
 /**
+ * Combine dead/retired scores from scores.raw with alive-character .pts.tns
+ * sidecar files and display the merged Hall of Fame.
+ */
+static void show_scores_with_alive(void)
+{
+	struct high_score scores[MAX_HISCORES];
+	ang_dir *d;
+	char fname[256];
+
+	/* Start with dead/retired characters from scores.raw */
+	highscore_read(scores, N_ELEMENTS(scores));
+
+	/* Merge alive-character .pts.tns sidecar files into the list. */
+	safe_setuid_grab();
+	d = my_dopen(ANGBAND_DIR_SAVE);
+	safe_setuid_drop();
+	if (d) {
+		while (1) {
+			char pts_path[1024];
+			bool have_name;
+			struct high_score alive;
+			ang_file *f;
+			bool have_read;
+
+			safe_setuid_grab();
+			have_name = my_dread(d, fname, sizeof(fname));
+			safe_setuid_drop();
+			if (!have_name) break;
+
+			/* Only process sidecar files. */
+			if (!suffix(fname, ".pts.tns")) continue;
+
+			path_build(pts_path, sizeof(pts_path),
+				ANGBAND_DIR_SAVE, fname);
+
+			safe_setuid_grab();
+			f = file_open(pts_path, MODE_READ, FTYPE_RAW);
+			safe_setuid_drop();
+			if (!f) continue;
+			have_read = (file_read(f, (char *)&alive,
+				sizeof(alive)) == (int)sizeof(alive));
+			file_close(f);
+			if (!have_read || !highscore_valid(&alive)) continue;
+
+			highscore_add(&alive, scores, N_ELEMENTS(scores));
+		}
+		my_dclose(d);
+	}
+
+	display_scores_aux(scores, 0, MAX_HISCORES, -1, true);
+}
+
+/**
  * Show scores.
  */
 void show_scores(void)
@@ -226,11 +295,7 @@ void show_scores(void)
 	if (character_generated) {
 		predict_score(true);
 	} else {
-		/* Currently unused, but leaving in in case we re-implement looking
-		 * at the scores without loading a character */
-		struct high_score scores[MAX_HISCORES];
-		highscore_read(scores, N_ELEMENTS(scores));
-		display_scores_aux(scores, 0, MAX_HISCORES, -1, true);
+		show_scores_with_alive();
 	}
 
 	screen_load();
