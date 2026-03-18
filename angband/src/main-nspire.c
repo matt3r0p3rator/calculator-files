@@ -324,11 +324,6 @@ static void init_files(void)
 
     init_file_paths(root, root, root);
 
-    /* Default save file */
-    char save[256];
-    snprintf(save, sizeof(save), "%sangband/lib/save/PLAYER", docs);
-    my_strcpy(savefile, save, sizeof(savefile));
-
     create_needed_dirs();
 }
 
@@ -405,8 +400,8 @@ int main(void)
     /* Wait for player to press a key before starting */
     pause_line(Term);
 
-    /* Main game loop */
-    play_game(GAME_LOAD);
+    /* Main game loop: show character-selection menu on startup */
+    play_game(GAME_SELECT);
 
     /* Clean up */
     textui_cleanup();

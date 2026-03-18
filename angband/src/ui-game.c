@@ -863,27 +863,122 @@ static void select_savefile(bool retry, bool *new_game)
 		quit("Cannot open the savefile directory");
 	}
 
+	/* Number of save-file entries (everything between the new-game slot
+	 * and the utility entries we are about to append). */
+	int save_start = allow_new_game ? 1 : 0;
+	int save_count = count - save_start;
+
+	/* Add "Hall of Fame" */
+	if (count == allocated) {
+		allocated *= 2;
+		entries = mem_realloc(entries, allocated * sizeof(*entries));
+		names = mem_realloc(names, allocated * sizeof(*names));
+	}
+	int hof_index = count;
+	entries[count] = string_make("Hall of Fame");
+	names[count] = string_make("");
+	++count;
+
+	/* Add "Delete character..." only when there are saves to delete */
+	int del_index = -1;
+	if (save_count > 0) {
+		if (count == allocated) {
+			allocated *= 2;
+			entries = mem_realloc(entries,
+				allocated * sizeof(*entries));
+			names = mem_realloc(names, allocated * sizeof(*names));
+		}
+		del_index = count;
+		entries[count] = string_make("Delete character...");
+		names[count] = string_make("");
+		++count;
+	}
+
 	m = menu_new(MN_SKIN_SCROLL, menu_find_iter(MN_ITER_STRINGS));
 	menu_setpriv(m, count, entries);
 	menu_layout(m, &m_region);
 	m->cursor = default_entry;
 	m->flags |= MN_DBL_TAP;
 
-	screen_save();
-	prt("Select the save to use (movement keys and enter or mouse) or quit",
-		0, 0);
-	prt("(escape or second mouse button).", 1, 0);
-	prt((retry) ? "The previously selected savefile was unusable." : "",
-		2, 0);
-	selection = menu_select(m, 0, false);
-	screen_load();
+	/* Loop so auxiliary actions (Hall of Fame, Delete) return to the
+	 * selection screen rather than launching a game. */
+	do {
+		screen_save();
+		prt("Select the save to use (movement keys and enter or mouse) or quit",
+			0, 0);
+		prt("(escape or second mouse button).", 1, 0);
+		prt((retry) ? "The previously selected savefile was unusable." : "",
+			2, 0);
+		selection = menu_select(m, 0, false);
+		screen_load();
+
+		if (selection.type == EVT_SELECT && m->cursor == hof_index) {
+			show_scores();
+		} else if (selection.type == EVT_SELECT
+				&& del_index >= 0 && m->cursor == del_index) {
+			/* Build a sub-menu listing every save with a Cancel option */
+			char **del_entries =
+				mem_zalloc((save_count + 1) * sizeof(*del_entries));
+			del_entries[0] = string_make("Cancel");
+			for (int i = 0; i < save_count; i++) {
+				/* entries[save_start+i] is "Use <name>: <desc>";
+				 * skip the "Use " prefix for the delete list. */
+				del_entries[i + 1] = string_make(
+					format("Delete %s",
+						entries[save_start + i] + 4));
+			}
+
+			struct menu *dm = menu_new(MN_SKIN_SCROLL,
+				menu_find_iter(MN_ITER_STRINGS));
+			struct region del_region = { 0, 3, 0, 0 };
+			menu_setpriv(dm, save_count + 1, del_entries);
+			menu_layout(dm, &del_region);
+			dm->cursor = 0;
+			dm->flags |= MN_DBL_TAP;
+
+			screen_save();
+			prt("Select a character to delete:", 0, 0);
+			prt("WARNING: deletion is permanent.", 1, 0);
+			prt("", 2, 0);
+			ui_event del_evt = menu_select(dm, 0, false);
+			int del_cursor = dm->cursor;
+			screen_load();
+			menu_free(dm);
+			for (int i = 0; i <= save_count; i++)
+				string_free(del_entries[i]);
+			mem_free(del_entries);
+
+			if (del_evt.type == EVT_SELECT && del_cursor > 0) {
+				int idx = save_start + del_cursor - 1;
+				/* entries[idx]+4 = "<name>: <desc>" */
+				if (get_check(format(
+						"Permanently delete '%s'? ",
+						entries[idx] + 4))) {
+					char full_path[1024];
+					path_build(full_path, sizeof(full_path),
+						ANGBAND_DIR_SAVE, names[idx]);
+					file_delete(full_path);
+					/* Rebuild the whole menu from disk */
+					menu_free(m);
+					cleanup_savefile_selection_strings(
+						names, count);
+					cleanup_savefile_selection_strings(
+						entries, count);
+					select_savefile(false, new_game);
+					return;
+				}
+			}
+		}
+	} while (selection.type == EVT_SELECT
+		&& (m->cursor == hof_index
+			|| (del_index >= 0 && m->cursor == del_index)));
 
 	if (selection.type == EVT_SELECT) {
 		if (m->cursor == 0 && allow_new_game) {
 			*new_game = true;
 		} else {
 			*new_game = false;
-			assert(m->cursor > 0 && m->cursor < count);
+			assert(m->cursor >= 0 && m->cursor < hof_index);
 			path_build(savefile, sizeof(savefile),
 				ANGBAND_DIR_SAVE, names[m->cursor]);
 		}

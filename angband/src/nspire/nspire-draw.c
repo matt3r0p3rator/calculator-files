@@ -59,6 +59,20 @@ static bool s_framebuf_dirty = false;
  * -------------------------------------------------------------------- */
 static uint8_t s_glyph_mask[256][FONT_SRC_H];
 
+/* -----------------------------------------------------------------------
+ * Horizontal drawing offset (pixels)
+ *
+ * The Nspire LCD bezel clips the leftmost screen column, causing
+ * characters whose glyph starts in column 0 (e.g. 'L', 'P') to have
+ * their left edge cut off.  Shifting every draw operation one pixel to
+ * the right keeps all glyphs fully visible.
+ *
+ * NOTE: this offset makes positions no longer 4-byte aligned, so all
+ * drawing loops below use individual 16-bit (nspire_pixel_t) stores
+ * rather than packed 32-bit stores.
+ * -------------------------------------------------------------------- */
+#define NSPIRE_X_OFFSET 1
+
 static const uint8_t nspire_font_data[256 * FONT_SRC_W * FONT_SRC_H] = {
 /* 0x00–0x1F  (control chars – all blank) */
 EMPTY_GLYPH, EMPTY_GLYPH, EMPTY_GLYPH, EMPTY_GLYPH,
@@ -1114,27 +1128,32 @@ void nspire_draw_char(int col, int row, int c,
     /* Use the compact glyph mask (1 byte/row) rather than the 5-byte-per-row
      * source table.  This is 5× smaller, fitting more glyphs in D-cache.
      *
-     * No +1 bezel offset: cells exactly tile [0, 320).  This also keeps
-     * every cell 4-byte aligned, enabling safe 32-bit stores below. */
+     * NSPIRE_X_OFFSET shifts the glyph one pixel right so that glyphs
+     * starting in column 0 (e.g. 'L', 'P') are not clipped by the bezel.
+     * The offset makes dst no longer 4-byte aligned, so we use individual
+     * 16-bit stores instead of packed 32-bit stores. */
     const uint8_t *mask = s_glyph_mask[(unsigned char)c];
     nspire_pixel_t *dst = framebuf
                           + row * NSPIRE_FONT_H * NSPIRE_SCREEN_W
-                          + col * NSPIRE_FONT_W;
+                          + col * NSPIRE_FONT_W
+                          + NSPIRE_X_OFFSET; /* 1-pixel left-bezel compensation */
 
     for (int gy = 0; gy < FONT_SRC_H; gy++, dst += NSPIRE_SCREEN_W) {
-        /* Each row fits in one byte; derive 4 pixel values from bits 3..0.
-         * Pack two adjacent pixels into one 32-bit store (ARM is LE):
-         *   low  16 bits → first  pixel (col+0)
-         *   high 16 bits → second pixel (col+1)
-         * Result: 2 stores per row instead of 4 — halves memory traffic. */
+        /* Derive 4 pixel values from bits 3..0 and write individually.
+         * Clip the last pixel when it would fall outside the framebuffer
+         * (can happen for the rightmost column due to the X offset). */
         uint8_t m = mask[gy];
-        uint32_t p01 = (uint32_t)((m & 0x08) ? fg : bg)
-                     | ((uint32_t)((m & 0x04) ? fg : bg) << 16);
-        uint32_t p23 = (uint32_t)((m & 0x02) ? fg : bg)
-                     | ((uint32_t)((m & 0x01) ? fg : bg) << 16);
-        uint32_t *r = (uint32_t *)dst;
-        r[0] = p01;
-        r[1] = p23;
+        nspire_pixel_t px[4] = {
+            (m & 0x08) ? fg : bg,
+            (m & 0x04) ? fg : bg,
+            (m & 0x02) ? fg : bg,
+            (m & 0x01) ? fg : bg,
+        };
+        int end_px = col * NSPIRE_FONT_W + NSPIRE_X_OFFSET + NSPIRE_FONT_W;
+        int draw   = (end_px <= NSPIRE_SCREEN_W) ? NSPIRE_FONT_W
+                                                 : NSPIRE_FONT_W - (end_px - NSPIRE_SCREEN_W);
+        for (int i = 0; i < draw; i++)
+            dst[i] = px[i];
     }
     s_framebuf_dirty = true;
 }
@@ -1145,17 +1164,22 @@ void nspire_fill_cells(int col, int row, int ncols, nspire_pixel_t colour)
      * Used by the Term_wipe hook to avoid the per-character overhead of
      * nspire_draw_char when erasing spans of cells.
      *
-     * Cell x=col is at pixel col*4; all positions are 4-byte aligned so
-     * 32-bit stores are safe (framebuf is statically 4-byte aligned and
-     * col*NSPIRE_FONT_W is always divisible by 2 uint16_t units). */
-    uint32_t fill32 = (uint32_t)colour | ((uint32_t)colour << 16);
-    int width_px    = ncols * NSPIRE_FONT_W;    /* multiple of 4 */
-    int base_idx    = row * NSPIRE_FONT_H * NSPIRE_SCREEN_W + col * NSPIRE_FONT_W;
+     * Applies NSPIRE_X_OFFSET so that the erased region matches where
+     * nspire_draw_char places glyphs.  Individual 16-bit stores are used
+     * because the offset makes the address no longer 4-byte aligned. */
+    int width_px = ncols * NSPIRE_FONT_W;
+    int base_idx = row * NSPIRE_FONT_H * NSPIRE_SCREEN_W
+                   + col * NSPIRE_FONT_W
+                   + NSPIRE_X_OFFSET; /* 1-pixel left-bezel compensation */
+    /* Clip width to stay within the framebuffer */
+    int avail = NSPIRE_SCREEN_W - (col * NSPIRE_FONT_W + NSPIRE_X_OFFSET);
+    if (width_px > avail)
+        width_px = avail;
 
     for (int gy = 0; gy < NSPIRE_FONT_H; gy++) {
-        uint32_t *r = (uint32_t *)(framebuf + base_idx + gy * NSPIRE_SCREEN_W);
-        for (int i = 0; i < width_px / 2; i++)
-            r[i] = fill32;
+        nspire_pixel_t *r = framebuf + base_idx + gy * NSPIRE_SCREEN_W;
+        for (int i = 0; i < width_px; i++)
+            r[i] = colour;
     }
     s_framebuf_dirty = true;
 }
@@ -1163,24 +1187,28 @@ void nspire_fill_cells(int col, int row, int ncols, nspire_pixel_t colour)
 
 void nspire_draw_cursor(int col, int row)
 {
-    int px0 = col  * NSPIRE_FONT_W;
+    /* Apply NSPIRE_X_OFFSET so the cursor box aligns with the drawn glyphs. */
+    int px0 = col  * NSPIRE_FONT_W + NSPIRE_X_OFFSET; /* 1-pixel left-bezel compensation */
     int py0 = row  * NSPIRE_FONT_H;
     int px1 = px0  + NSPIRE_FONT_W - 1;
     int py1 = py0  + NSPIRE_FONT_H - 1;
+    /* Clip px1 to the last valid screen column */
+    if (px1 >= NSPIRE_SCREEN_W)
+        px1 = NSPIRE_SCREEN_W - 1;
 
     /* Top row */
     nspire_pixel_t *top = framebuf + py0 * NSPIRE_SCREEN_W + px0;
-    top[0] = top[1] = top[2] = top[3] = NSPIRE_CURSOR;
+    for (int i = 0; i <= px1 - px0; i++) top[i] = NSPIRE_CURSOR;
 
     /* Bottom row */
     nspire_pixel_t *bot = framebuf + py1 * NSPIRE_SCREEN_W + px0;
-    bot[0] = bot[1] = bot[2] = bot[3] = NSPIRE_CURSOR;
+    for (int i = 0; i <= px1 - px0; i++) bot[i] = NSPIRE_CURSOR;
 
     /* Left / right vertical bars (skip corners already set) */
     for (int y = py0 + 1; y < py1; y++) {
         nspire_pixel_t *r = framebuf + y * NSPIRE_SCREEN_W + px0;
-        r[0]  = NSPIRE_CURSOR;   /* left edge  */
-        r[px1 - px0] = NSPIRE_CURSOR;   /* right edge */
+        r[0]           = NSPIRE_CURSOR;   /* left edge  */
+        r[px1 - px0]   = NSPIRE_CURSOR;   /* right edge */
     }
     s_framebuf_dirty = true;
 }

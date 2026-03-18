@@ -1,0 +1,1 @@
+buildid.o: buildid.c /usr/include/stdc-predef.h buildid.h version.h
