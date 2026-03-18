@@ -1306,8 +1306,8 @@ struct object *make_gold(int lev, const char *coin_type)
 	/* Prepare a gold object */
 	object_prep(new_gold, money_kind(coin_type, value), lev, RANDOMISE);
 
-	/* If we're playing with no_selling, increase the value */
-	if (OPT(player, birth_no_selling) && player->depth)	{
+	/* Increase gold value on dungeon levels */
+	if (player->depth) {
 		value *= 5;
 	}
 

@@ -558,15 +558,22 @@ static bool store_sell(struct store_context *ctx)
 		object_wipe(temp_obj);
 		screen_save();
 
-		/* Show price */
-		if (!OPT(player, birth_no_selling))
-			prt(format("Price: %ld", (long)price), 1, 0);
+		/* Flush any buffered keypresses from item selection/quantity entry */
+		event_signal(EVENT_INPUT_FLUSH);
 
 		/* Confirm sale */
-		if (!store_get_check(format("%s %s? [ESC, any other key to accept]",
-				OPT(player, birth_no_selling) ? "Give" : "Sell", o_name))) {
-			screen_load();
-			return false;
+		if (OPT(player, birth_no_selling)) {
+			if (!store_get_check(format("Give %s? [ESC, any other key to accept]",
+					o_name))) {
+				screen_load();
+				return false;
+			}
+		} else {
+			if (!store_get_check(format("Sell %s for %ld gold? [ESC, any other key to accept]",
+					o_name, (long)price))) {
+				screen_load();
+				return false;
+			}
 		}
 
 		screen_load();

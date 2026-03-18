@@ -151,18 +151,26 @@ static bool option_toggle_handle(struct menu *m, const ui_event *event,
 		/* Birth options can not be toggled after birth */
 		/* At birth, m->flags == MN_DBL_TAP. */
 		/* After birth, m->flags == MN_NO_TAGS */
-		if (!((page == OP_BIRTH) && (m->flags == MN_NO_TAGS))) {
+		/* Exception: birth_no_selling can always be toggled */
+		if (!((page == OP_BIRTH) && (m->flags == MN_NO_TAGS)) ||
+				(oid == OPT_birth_no_selling)) {
 			option_set(option_name(oid), !player->opts.opt[oid]);
 		}
 	} else if (event->type == EVT_KBRD) {
 		if (event->key.code == 'y' || event->key.code == 'Y') {
-			option_set(option_name(oid), true);
+			if (page != OP_BIRTH || m->flags != MN_NO_TAGS ||
+					oid == OPT_birth_no_selling)
+				option_set(option_name(oid), true);
 			next = true;
 		} else if (event->key.code == 'n' || event->key.code == 'N') {
-			option_set(option_name(oid), false);
+			if (page != OP_BIRTH || m->flags != MN_NO_TAGS ||
+					oid == OPT_birth_no_selling)
+				option_set(option_name(oid), false);
 			next = true;
 		} else if (event->key.code == 't' || event->key.code == 'T') {
-			option_set(option_name(oid), !player->opts.opt[oid]);
+			if (page != OP_BIRTH || m->flags != MN_NO_TAGS ||
+					oid == OPT_birth_no_selling)
+				option_set(option_name(oid), !player->opts.opt[oid]);
 		} else if (event->key.code == 's' || event->key.code == 'S') {
 			char dummy;
 
@@ -336,8 +344,8 @@ static void option_toggle_menu(const char *name, int page)
 
 	/* We add 10 onto the page amount to indicate we're at birth */
 	if (page == OPT_PAGE_BIRTH) {
-		m->prompt = "You can only modify these options at character birth.";
-		m->cmd_keys = "";
+		m->prompt = "Most options are fixed at birth. 'No selling' (y/n/t) can still be changed.";
+		m->cmd_keys = "YyNnTt";
 		m->flags = MN_NO_TAGS;
 	} else if (page == OPT_PAGE_BIRTH + 10 || page == OP_INTERFACE) {
 		m->prompt = "Set option (y/n/t), 's' to save, 'r' to restore, 'x' to reset";

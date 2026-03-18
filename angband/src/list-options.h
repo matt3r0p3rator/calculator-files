@@ -88,7 +88,7 @@ BIRTH, false)
 OP(birth_feelings,        "Show level feelings",
 BIRTH, true)
 OP(birth_no_selling,      "Increase gold drops but disable selling",
-BIRTH, true)
+BIRTH, false)
 OP(birth_start_kit,       "Start with a kit of useful gear",
 BIRTH, true)
 OP(birth_ai_learn,        "Monsters learn from their mistakes",
