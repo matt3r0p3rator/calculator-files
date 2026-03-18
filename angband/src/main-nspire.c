@@ -253,13 +253,8 @@ static errr Term_text_nspire(int x, int y, int n, int a, const wchar_t *s)
         break;
     }
 
-    for (int i = 0; i < n; i++) {
-        /* Truncate to 8-bit ASCII for our bitmap font.
-         * Wide chars outside 0x00–0xFF are rendered as '?'. */
-        int ch = (int)(s[i]);
-        if (ch < 0 || ch > 0xFF) ch = '?';
-        nspire_draw_char(x + i, y, ch, fg, bg);
-    }
+    /* Draw all n characters in a single batched pass. */
+    nspire_draw_chars(x, y, n, fg, bg, s);
 
     return 0;
 }

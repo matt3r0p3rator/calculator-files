@@ -23,7 +23,7 @@ GCOVS = $(OBJECTS:.o=.c.gcov)
 # buildsys's default clean will take care of any .o from SRCS; $(PROGNAME).o
 # is a relic and only there to clean up an intermediate from previous versions
 # of this Makefile.
-CLEAN = $(PROGNAME).a $(PROGNAME).o $(ALLMAINFILES) ${ALLMAINFILES:.o=.dep} version.h
+CLEAN = $(PROGNAME).a $(PROGNAME).o $(NSPIREMAINFILES) ${NSPIREMAINFILES:.o=.dep} version.h
 DISTCLEAN = autoconf.h tests/.deps
 
 $(PROG): $(PROGNAME).a $(MAINFILES)
@@ -98,7 +98,7 @@ version.h: FORCE
 buildid.o: version.h
 
 splint:
-	splint -f .splintrc ${OBJECTS:.o=.c} main.c main-gcu.c
+	splint -f .splintrc ${OBJECTS:.o=.c} main-nspire.c
 
 clean-coverage:
 	rm -f tests/ran-already

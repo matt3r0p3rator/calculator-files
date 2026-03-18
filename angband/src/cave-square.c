@@ -118,6 +118,10 @@ bool feat_is_shop(int feat)
 	return tf_has(f_info[feat].flags, TF_SHOP);
 }
 
+/* square_isprojectable() and square_allowslos() are the innermost calls in
+ * the LOS hot path; O3 lets GCC inline and optimise them aggressively. */
+#pragma GCC optimize("O3")
+
 /**
  * True if the feature allows line-of-sight.
  */

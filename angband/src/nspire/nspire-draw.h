@@ -88,6 +88,22 @@ void nspire_draw_char(int col, int row, int c,
                       nspire_pixel_t fg, nspire_pixel_t bg);
 
 /**
+ * Draw n characters from wide-char string s at terminal cell (col, row),
+ * all in the same fg/bg colours.  Faster than n individual nspire_draw_char()
+ * calls because the row-base pointer and pair[] lookup table are computed
+ * once for the entire span, and clipping is only checked for the last glyph.
+ * @param col  starting terminal column
+ * @param row  terminal row
+ * @param n    number of characters to draw
+ * @param fg   foreground colour (RGB-565)
+ * @param bg   background colour (RGB-565)
+ * @param s    wide-char string of length >= n
+ */
+void nspire_draw_chars(int col, int row, int n,
+                       nspire_pixel_t fg, nspire_pixel_t bg,
+                       const wchar_t *s);
+
+/**
  * Draw a cursor indicator (small rectangle outline) at cell (col, row).
  */
 void nspire_draw_cursor(int col, int row);

@@ -30,6 +30,10 @@
 #include "player-timed.h"
 #include "trap.h"
 
+/* Aggressive scalar optimisation — map_info() is called for every visible
+ * cell on every redraw; the ARM926 benefits significantly. */
+#pragma GCC optimize("O3,unroll-loops")
+
 /**
  * This function takes a grid location and extracts information the
  * player is allowed to know about it, filling in the grid_data structure

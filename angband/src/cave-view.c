@@ -26,6 +26,167 @@
 #include "player-timed.h"
 #include "trap.h"
 
+/* Ask GCC for aggressive scalar optimisation in this translation unit.
+ * cave-view.c contains the update_view() hot path which runs on every player
+ * step; the ARM926EJ-S in the Nspire CX II benefits greatly from O3 here. */
+#pragma GCC optimize("O3,unroll-loops")
+
+/* -----------------------------------------------------------------------
+ * Per-frame view bounding-box projectable/LOS cache
+ *
+ * Stores one byte per cell covering the sight+2 neighbourhood around the
+ * player.  Built once at the top of update_view() and consumed by
+ * update_view_one() / los_fast().
+ *
+ * Byte layout:
+ *   bit 0 → square_isprojectable() (used by los_fast inner loop)
+ *   bit 1 → square_allowslos()     (used by wall-proxy logic)
+ *   bit 2 → SQUARE_GLOW            (used by calc_lighting glow loop)
+ *
+ * Side length 50 is > 2*(max_sight+2)+1 = 45 for max_sight=20, so it
+ * comfortably handles max_sight up to 23 before resizing is needed.
+ * The entire array is 50×50 = 2500 bytes — fits in the ARM926's 16 KB L1D.
+ * -------------------------------------------------------------------- */
+#define NSPIRE_VC_SIDE  50
+
+static uint8_t s_vcache[NSPIRE_VC_SIDE][NSPIRE_VC_SIDE];
+static int     s_vc_y0, s_vc_x0;  /* top-left corner of cache in dungeon coords */
+static int     s_vc_y1, s_vc_x1;  /* bottom-right corner */
+
+/* Read cache — caller must guarantee (x,y) is within the valid bbox */
+#define VC_PROJ(x, y)  (s_vcache[(y) - s_vc_y0][(x) - s_vc_x0] & 1u)
+#define VC_LOS(x, y)   ((s_vcache[(y) - s_vc_y0][(x) - s_vc_x0] >> 1) & 1u)
+/* bit 2 = SQUARE_GLOW, populated by build_view_cache() */
+#define VC_GLOW(x, y)  ((s_vcache[(y) - s_vc_y0][(x) - s_vc_x0] >> 2) & 1u)
+/* Guard for callers whose bbox may slightly exceed the LOS bbox (add_light) */
+#define VC_IN_BOUNDS(x, y) \
+	((y) >= s_vc_y0 && (y) <= s_vc_y1 && (x) >= s_vc_x0 && (x) <= s_vc_x1)
+
+/**
+ * Build the view cache for the bounding box [y0..y1] × [x0..x1].
+ * Called once at the top of update_view() before any LOS work starts.
+ */
+static void build_view_cache(struct chunk *c, int y0, int y1, int x0, int x1)
+{
+	int x, y;
+	s_vc_y0 = y0;
+	s_vc_x0 = x0;
+	s_vc_y1 = y1;
+	s_vc_x1 = x1;
+	for (y = y0; y <= y1; y++) {
+		for (x = x0; x <= x1; x++) {
+			const struct square *sq = square(c, loc(x, y));
+			uint8_t v = 0;
+			if (feat_is_projectable(sq->feat)) v |= 1u;
+			if (feat_is_los(sq->feat))         v |= 2u;
+			if (sqinfo_has(sq->info, SQUARE_GLOW)) v |= 4u;
+			s_vcache[y - y0][x - x0] = v;
+		}
+	}
+}
+
+/**
+ * Fast LOS check using the per-frame view cache instead of hitting the full
+ * cave array on every inner step.  Only call this when both endpoints are
+ * guaranteed to lie within the cache bbox built by build_view_cache().
+ *
+ * This is a verbatim copy of los() with every square_isprojectable() call
+ * replaced by the VC_PROJ() cache lookup.  The bounds check inside
+ * square_isprojectable() is intentionally omitted: all intermediate cells
+ * along a line between two in-bounds, in-bbox endpoints are also in-bbox.
+ */
+static bool los_fast(struct loc grid1, struct loc grid2)
+{
+	int dx, dy, ax, ay, sx, sy, qx, qy, tx, ty, f1, f2, m;
+
+	dy = grid2.y - grid1.y;
+	dx = grid2.x - grid1.x;
+	ay = ABS(dy);
+	ax = ABS(dx);
+
+	if ((ax < 2) && (ay < 2)) return true;
+
+	if (!dx) {
+		if (dy > 0) {
+			for (ty = grid1.y + 1; ty < grid2.y; ty++)
+				if (!VC_PROJ(grid1.x, ty)) return false;
+		} else {
+			for (ty = grid1.y - 1; ty > grid2.y; ty--)
+				if (!VC_PROJ(grid1.x, ty)) return false;
+		}
+		return true;
+	}
+
+	if (!dy) {
+		if (dx > 0) {
+			for (tx = grid1.x + 1; tx < grid2.x; tx++)
+				if (!VC_PROJ(tx, grid1.y)) return false;
+		} else {
+			for (tx = grid1.x - 1; tx > grid2.x; tx--)
+				if (!VC_PROJ(tx, grid1.y)) return false;
+		}
+		return true;
+	}
+
+	sx = (dx < 0) ? -1 : 1;
+	sy = (dy < 0) ? -1 : 1;
+
+	if ((ax == 1) && (ay == 2) && VC_PROJ(grid1.x, grid1.y + sy))
+		return true;
+	else if ((ay == 1) && (ax == 2) && VC_PROJ(grid1.x + sx, grid1.y))
+		return true;
+
+	f2 = ax * ay;
+	f1 = f2 << 1;
+
+	if (ax >= ay) {
+		qy = ay * ay;
+		m  = qy << 1;
+		tx = grid1.x + sx;
+		if (qy == f2) { ty = grid1.y + sy; qy -= f1; }
+		else            ty = grid1.y;
+		while (grid2.x - tx) {
+			if (!VC_PROJ(tx, ty)) return false;
+			qy += m;
+			if (qy < f2) {
+				tx += sx;
+			} else if (qy > f2) {
+				ty += sy;
+				if (!VC_PROJ(tx, ty)) return false;
+				qy -= f1;
+				tx += sx;
+			} else {
+				ty += sy;
+				qy -= f1;
+				tx += sx;
+			}
+		}
+	} else {
+		qx = ax * ax;
+		m  = qx << 1;
+		ty = grid1.y + sy;
+		if (qx == f2) { tx = grid1.x + sx; qx -= f1; }
+		else            tx = grid1.x;
+		while (grid2.y - ty) {
+			if (!VC_PROJ(tx, ty)) return false;
+			qx += m;
+			if (qx < f2) {
+				ty += sy;
+			} else if (qx > f2) {
+				tx += sx;
+				if (!VC_PROJ(tx, ty)) return false;
+				qx -= f1;
+				ty += sy;
+			} else {
+				tx += sx;
+				qx -= f1;
+				ty += sy;
+			}
+		}
+	}
+	return true;
+}
+
 /**
  * Approximate distance between two points.
  *
@@ -430,14 +591,37 @@ bool los(struct chunk *c, struct loc grid1, struct loc grid2)
 
 
 /**
- * Mark the currently seen grids, then wipe in preparation for recalculating
+ * Mark the currently seen grids, then wipe in preparation for recalculating.
+ *
+ * Restricted to the union of the *previous* and *current* view bounding boxes
+ * so that grids that were in view last frame but just fell outside the new bbox
+ * (e.g. after a single-step move) still get their stale VIEW/SEEN flags cleared.
+ * This eliminates the original O(dungeon_width × dungeon_height) full scan and
+ * replaces it with O(sight²) — roughly a 7× speedup on a standard dungeon.
  */
-static void mark_wasseen(struct chunk *c)
+static void mark_wasseen(struct chunk *c, int y0, int y1, int x0, int x1)
 {
 	int x, y;
-	/* Save the old "view" grids for later */
-	for (y = 0; y < c->height; y++) {
-		for (x = 0; x < c->width; x++) {
+
+	/* Union with the bbox from the previous call so stale flags are cleared. */
+	static int py0 = -1, py1 = -1, px0 = -1, px1 = -1;
+
+	int uy0 = (py0 >= 0 && py0 < y0) ? py0 : y0;
+	int uy1 = (py1 > y1)              ? py1 : y1;
+	int ux0 = (px0 >= 0 && px0 < x0) ? px0 : x0;
+	int ux1 = (px1 > x1)              ? px1 : x1;
+
+	/* Clamp to dungeon bounds */
+	if (uy0 < 0)            uy0 = 0;
+	if (uy1 >= c->height)   uy1 = c->height - 1;
+	if (ux0 < 0)            ux0 = 0;
+	if (ux1 >= c->width)    ux1 = c->width - 1;
+
+	/* Remember current bbox for next call */
+	py0 = y0; py1 = y1; px0 = x0; px1 = x1;
+
+	for (y = uy0; y <= uy1; y++) {
+		for (x = ux0; x <= ux1; x++) {
 			struct loc grid = loc(x, y);
 			if (square_isseen(c, grid))
 				sqinfo_on(square(c, grid)->info, SQUARE_WASSEEN);
@@ -627,14 +811,27 @@ static void add_light(struct chunk *c, struct player *p, struct loc sgrid,
 			int dist = distance(sgrid, grid);
 			if (!square_in_bounds(c, grid)) continue;
 			if (dist > radius) continue;
-			/* Don't propagate the light through walls. */
-			if (!los(c, sgrid, grid)) continue;
+			/* Don't propagate the light through walls.
+			 * Use the per-frame view cache when both endpoints are
+			 * within its bbox; fall back for rare cases where a
+			 * monster's light radius extends past the cache edge. */
+			if (VC_IN_BOUNDS(sgrid.x, sgrid.y) &&
+					VC_IN_BOUNDS(grid.x, grid.y)) {
+				if (!los_fast(sgrid, grid)) continue;
+			} else {
+				if (!los(c, sgrid, grid)) continue;
+			}
 			/*
 			 * Only light a wall if the face lit is possibly visible
 			 * to the player.
 			 */
-			if (!square_allowslos(c, grid) && !source_can_light_wall(c,
-					p, sgrid, grid)) continue;
+			{
+				bool proj = VC_IN_BOUNDS(grid.x, grid.y)
+				            ? (bool)VC_LOS(grid.x, grid.y)
+				            : square_allowslos(c, grid);
+				if (!proj && !source_can_light_wall(c, p, sgrid, grid))
+					continue;
+			}
 			/* Adjust the light level */
 			if (inten > 0) {
 				/* Light getting less further away */
@@ -680,8 +877,10 @@ static void calc_lighting(struct chunk *c, struct player *p)
 		for (x = x0; x <= x1; x++) {
 			struct loc grid = loc(x, y);
 
-			if (square_isglow(c, grid) &&
-					(square_allowslos(c, grid) ||
+			/* The cache bbox matches calc_lighting's y0/y1 exactly,
+			 * so (x,y) is always within bounds here. */
+			if (VC_GLOW(x, y) &&
+					(VC_LOS(x, y) ||
 					glow_can_light_wall(c, p, grid))) {
 				c->squares[y][x].light = 1;
 			} else {
@@ -764,7 +963,7 @@ static void become_viewable(struct chunk *c, struct loc grid, struct player *p,
 
 	/* Mark lit grids, and walls near to them, as seen */
 	if (square_islit(c, grid)) {
-		if (!square_allowslos(c, grid)) {
+		if (!VC_LOS(x, y)) {
 			/* For walls, check for a lit grid closer to the player */
 			int xc = (x < p->grid.x) ? (x + 1) : (x > p->grid.x) ? (x - 1) : x;
 			int yc = (y < p->grid.y) ? (y + 1) : (y > p->grid.y) ? (y - 1) : y;
@@ -805,8 +1004,13 @@ static void update_view_one(struct chunk *c, struct loc grid, struct player *p)
 	 * ###############
 	 * where the wall cell marked '1' would not be lit because the LOS
 	 * algorithm runs into the adjacent wall cell.
+	 *
+	 * Use the per-frame view cache (VC_LOS) instead of calling
+	 * square_allowslos() so the compiler keeps the flag table in registers
+	 * rather than re-dereferencing the cave array on every inner call.
+	 * los_fast() uses the same cache for its projectable checks.
 	 */
-	if (!square_allowslos(c, grid)) {
+	if (!VC_LOS(x, y)) {
 		int dx = x - p->grid.x;
 		int dy = y - p->grid.y;
 		int ax = ABS(dx);
@@ -821,7 +1025,7 @@ static void update_view_one(struct chunk *c, struct loc grid, struct player *p)
 		 * wall. If we don't do this, double-thickness walls will have
 		 * both sides visible.
 		 */
-		if (!square_allowslos(c, loc(xc, yc))) {
+		if (!VC_LOS(xc, yc)) {
 			xc = x;
 			yc = y;
 		}
@@ -829,21 +1033,19 @@ static void update_view_one(struct chunk *c, struct loc grid, struct player *p)
 		/* Check if we got here via the 'knight's move' rule and, if so,
 		 * don't steal LOS. */
 		if (ax == 2 && ay == 1) {
-			if (square_allowslos(c, loc(x - sx, y))
-				&& !square_allowslos(c, loc(x - sx, y - sy))) {
+			if (VC_LOS(x - sx, y) && !VC_LOS(x - sx, y - sy)) {
 				xc = x;
 				yc = y;
 			}
 		} else if (ax == 1 && ay == 2) {
-			if (square_allowslos(c, loc(x, y - sy))
-				&& !square_allowslos(c, loc(x - sx, y - sy))) {
+			if (VC_LOS(x, y - sy) && !VC_LOS(x - sx, y - sy)) {
 				xc = x;
 				yc = y;
 			}
 		}
 	}
 
-	if (los(c, p->grid, loc(xc, yc)))
+	if (los_fast(p->grid, loc(xc, yc)))
 		become_viewable(c, grid, p, close);
 }
 
@@ -891,9 +1093,36 @@ void update_view(struct chunk *c, struct player *p)
 {
 	int x, y;
 	int y0, y1, x0, x1, sight;
+	int y0c, y1c, x0c, x1c;
 
-	/* Record the current view */
-	mark_wasseen(c);
+	/*
+	 * Compute the bounding box first — it is needed by mark_wasseen()
+	 * (to restrict the flag-clear scan) and by build_view_cache().
+	 *
+	 * +1 margin: catches wall squares proxied from one floor cell closer
+	 * to the player, and squares that just left view so update_one() can
+	 * issue the required square_light_spot() call.
+	 */
+	sight = z_info->max_sight;
+	y0 = p->grid.y - sight - 1; if (y0 < 0) y0 = 0;
+	y1 = p->grid.y + sight + 1; if (y1 >= c->height) y1 = c->height - 1;
+	x0 = p->grid.x - sight - 1; if (x0 < 0) x0 = 0;
+	x1 = p->grid.x + sight + 1; if (x1 >= c->width) x1 = c->width - 1;
+
+	/*
+	 * Build the per-frame projectable/allowslos cache.  Extend the bbox by
+	 * one extra cell in each direction (+2 total margin) so that the proxy
+	 * wall checks in update_view_one() — which look at (x±1, y±1) relative
+	 * to the loop cell — are always covered, avoiding out-of-bounds reads.
+	 */
+	y0c = y0 - 1; if (y0c < 0) y0c = 0;
+	y1c = y1 + 1; if (y1c >= c->height) y1c = c->height - 1;
+	x0c = x0 - 1; if (x0c < 0) x0c = 0;
+	x1c = x1 + 1; if (x1c >= c->width) x1c = c->width - 1;
+	build_view_cache(c, y0c, y1c, x0c, x1c);
+
+	/* Record the current view, restricted to the union of prev+curr bbox */
+	mark_wasseen(c, y0, y1, x0, x1);
 
 	/* Calculate light levels */
 	calc_lighting(c, p);
@@ -915,22 +1144,6 @@ void update_view(struct chunk *c, struct player *p)
 			&& !square_ispassable(p->cave, p->grid)) {
 		square_forget(c, p->grid);
 	}
-
-	/*
-	 * Restrict both passes to a bounding box of max_sight+1 around the
-	 * player.  update_view_one() already skips grids with d>max_sight,
-	 * but eliminating those iterations avoids the distance() call and
-	 * function-call overhead for the vast majority of dungeon cells.
-	 * Using +1 as margin catches wall squares whose LOS is proxied from
-	 * the adjacent floor cell one step closer to the player, and also
-	 * squares that just stepped out of view after a single-step move so
-	 * that update_one() can issue the required square_light_spot() call.
-	 */
-	sight = z_info->max_sight;
-	y0 = p->grid.y - sight - 1; if (y0 < 0) y0 = 0;
-	y1 = p->grid.y + sight + 1; if (y1 >= c->height) y1 = c->height - 1;
-	x0 = p->grid.x - sight - 1; if (x0 < 0) x0 = 0;
-	x1 = p->grid.x + sight + 1; if (x1 >= c->width) x1 = c->width - 1;
 
 	/* Squares we have LOS to get marked as in the view, and perhaps seen */
 	for (y = y0; y <= y1; y++)

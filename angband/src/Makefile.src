@@ -112,52 +112,14 @@ ZFILES = \
 	z-util.o \
 	z-virt.o
 
-# MAINFILES is defined by autotools (or manually) to be combinations of these
-
-BASEMAINFILES = main.o
-
-GCUMAINFILES = main-gcu.o
-
-SDL2MAINFILES = \
-	main-sdl2.o \
-	sdl2/pui-ctrl.o \
-	sdl2/pui-dlg.o \
-	sdl2/pui-misc.o
-
-SDLMAINFILES = main-sdl.o
-
-SNDSDLFILES = snd-sdl.o
-
-TESTMAINFILES = main-test.o
-
-WINMAINFILES = \
-        win/$(PROGNAME).res \
-        main-win.o \
-        win/readdib.o \
-        win/readpng.o \
-        win/scrnshot.o \
-		win/win-layout.o
-
-X11MAINFILES = main-x11.o
-
-STATSMAINFILES = main-stats.o \
-        stats/db.o
-
-SPOILMAINFILES = main-spoil.o
-
-# Remember all optional intermediates so "make clean" will get all of them
-# even if the configuration has changed since a build was done.
-ALLMAINFILES = \
-	$(BASEMAINFILES) \
-	$(GCUMAINFILES) \
-	$(SDL2MAINFILES) \
-	$(SDLMAINFILES) \
-	$(SNDSDLFILES) \
-	$(TESTMAINFILES) \
-	$(WINMAINFILES) \
-	$(X11MAINFILES) \
-	$(STATSMAINFILES) \
-	$(SPOILMAINFILES)
+# Nspire frontend objects (used by Makefile.nspire)
+NSPIREMAINFILES = \
+	main-nspire.o \
+	nspire/nspire-draw.o \
+	nspire/nspire-event.o \
+	nspire/nspire-input.o \
+	nspire/nspire-mem-alt.o \
+	nspire/nspire-fopen.o
 
 ANGFILES0 = \
 	cave.o \

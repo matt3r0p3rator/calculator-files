@@ -17,6 +17,11 @@
 #include <stdio.h>
 #include <string.h>
 
+/* Ask GCC to apply the most aggressive scalar/store optimisations to every
+ * function in this translation unit.  This is critical on the 150 MHz ARM
+ * of the Nspire CX II where the framebuffer bandwidth is the bottleneck. */
+#pragma GCC optimize("O3,unroll-loops")
+
 /* -----------------------------------------------------------------------
  * Software framebuffer
  * -------------------------------------------------------------------- */
@@ -24,7 +29,11 @@ static nspire_pixel_t framebuf[NSPIRE_SCREEN_W * NSPIRE_SCREEN_H];
 
 /* Dirty flag: set whenever the framebuffer is modified, cleared when
  * flushed to the LCD.  Avoids the costly lcd_blit() when nothing changed. */
-static bool s_framebuf_dirty = false;
+static bool     s_framebuf_dirty = false;
+/* Bitmask of dirty terminal rows (bit y set = row y needs flushing).
+ * 30 rows fit in a single uint32_t.  Set by every draw function, cleared
+ * by nspire_video_flush() after the LCD copy. */
+static uint32_t s_dirty_rows = 0u;
 
 /* -----------------------------------------------------------------------
  * Embedded 5×8 bitmap font (ASCII 0x00–0xFF)
@@ -1102,8 +1111,28 @@ void nspire_video_flush(void)
 {
     if (!s_framebuf_dirty)
         return;
-    lcd_blit(framebuf, SCR_320x240_565);
     s_framebuf_dirty = false;
+
+    uint8_t *hw = (uint8_t *)REAL_SCREEN_BASE_ADDRESS;
+    const uint8_t *sw = (const uint8_t *)framebuf;
+    /* One terminal row spans NSPIRE_FONT_H pixel rows, each NSPIRE_SCREEN_W
+     * pixels wide (2 bytes each). */
+    const int row_stride = NSPIRE_FONT_H * NSPIRE_SCREEN_W
+                           * (int)sizeof(nspire_pixel_t);
+    uint32_t dirty = s_dirty_rows;
+    s_dirty_rows = 0u;
+
+    /* Merge contiguous dirty terminal rows into a single memcpy per run.
+     * This maximises AHB burst-write efficiency and reduces call overhead
+     * compared to 30 individual row copies. */
+    while (dirty) {
+        int start = __builtin_ctz(dirty);
+        int len   = __builtin_ctz(~(dirty >> start));
+        dirty &= ~(((1u << len) - 1u) << start);
+        memcpy(hw + start * row_stride,
+               sw + start * row_stride,
+               (size_t)len * row_stride);
+    }
 }
 
 void nspire_clear(nspire_pixel_t colour)
@@ -1116,6 +1145,8 @@ void nspire_clear(nspire_pixel_t colour)
     uint32_t *end = p + (NSPIRE_SCREEN_W * NSPIRE_SCREEN_H / 2);
     while (p < end)
         *p++ = fill;
+    /* Mark every terminal row dirty so nspire_video_flush copies the whole screen. */
+    s_dirty_rows = (1u << NSPIRE_TERM_ROWS) - 1u;
     s_framebuf_dirty = true;
 }
 
@@ -1125,36 +1156,91 @@ void nspire_draw_char(int col, int row, int c,
     if ((unsigned)c > 0xFF)
         c = 0x20;
 
-    /* Use the compact glyph mask (1 byte/row) rather than the 5-byte-per-row
-     * source table.  This is 5× smaller, fitting more glyphs in D-cache.
-     *
-     * NSPIRE_X_OFFSET shifts the glyph one pixel right so that glyphs
-     * starting in column 0 (e.g. 'L', 'P') are not clipped by the bezel.
-     * The offset makes dst no longer 4-byte aligned, so we use individual
-     * 16-bit stores instead of packed 32-bit stores. */
-    const uint8_t *mask = s_glyph_mask[(unsigned char)c];
     nspire_pixel_t *dst = framebuf
                           + row * NSPIRE_FONT_H * NSPIRE_SCREEN_W
                           + col * NSPIRE_FONT_W
                           + NSPIRE_X_OFFSET; /* 1-pixel left-bezel compensation */
 
-    for (int gy = 0; gy < FONT_SRC_H; gy++, dst += NSPIRE_SCREEN_W) {
-        /* Derive 4 pixel values from bits 3..0 and write individually.
-         * Clip the last pixel when it would fall outside the framebuffer
-         * (can happen for the rightmost column due to the X offset). */
-        uint8_t m = mask[gy];
-        nspire_pixel_t px[4] = {
-            (m & 0x08) ? fg : bg,
-            (m & 0x04) ? fg : bg,
-            (m & 0x02) ? fg : bg,
-            (m & 0x01) ? fg : bg,
-        };
-        int end_px = col * NSPIRE_FONT_W + NSPIRE_X_OFFSET + NSPIRE_FONT_W;
-        int draw   = (end_px <= NSPIRE_SCREEN_W) ? NSPIRE_FONT_W
-                                                 : NSPIRE_FONT_W - (end_px - NSPIRE_SCREEN_W);
-        for (int i = 0; i < draw; i++)
-            dst[i] = px[i];
+    /* Hoist clipping check: only the very last terminal column can overflow.
+     * Computing it once here instead of inside the 8-row loop saves ~7
+     * redundant multiply-add sequences per character draw. */
+    const int end_px = col * NSPIRE_FONT_W + NSPIRE_X_OFFSET + NSPIRE_FONT_W;
+    const int clipped = (end_px > NSPIRE_SCREEN_W);
+    const int draw    = clipped ? NSPIRE_FONT_W - (end_px - NSPIRE_SCREEN_W)
+                                : NSPIRE_FONT_W;
+
+    /* Fast path: fg == bg means the glyph is invisible – just solid-fill
+     * the cell.  This covers BG_SAME tiles and avoids a mask table lookup. */
+    if (fg == bg) {
+        const uint32_t fill = ((uint32_t)fg << 16) | fg;
+        if (!clipped) {
+            /* 2× 32-bit stores per row, 8 rows fully unrolled */
+#define NSPIRE_FILL_ROW(gy) do { \
+    __builtin_memcpy(dst + (gy)*NSPIRE_SCREEN_W,     &fill, 4); \
+    __builtin_memcpy(dst + (gy)*NSPIRE_SCREEN_W + 2, &fill, 4); \
+} while (0)
+            NSPIRE_FILL_ROW(0); NSPIRE_FILL_ROW(1);
+            NSPIRE_FILL_ROW(2); NSPIRE_FILL_ROW(3);
+            NSPIRE_FILL_ROW(4); NSPIRE_FILL_ROW(5);
+            NSPIRE_FILL_ROW(6); NSPIRE_FILL_ROW(7);
+#undef NSPIRE_FILL_ROW
+        } else {
+            for (int gy = 0; gy < FONT_SRC_H; gy++, dst += NSPIRE_SCREEN_W)
+                for (int i = 0; i < draw; i++) dst[i] = fg;
+        }
+        s_dirty_rows |= 1u << row;
+        s_framebuf_dirty = true;
+        return;
     }
+
+    /* Normal path: look up the compact 1-byte-per-row glyph mask.
+     * 256×8 = 2 KB working set fits comfortably in the D-cache. */
+    const uint8_t *mask = s_glyph_mask[(unsigned char)c];
+
+    /* Precompute all four possible 2-pixel packed words (one per combination
+     * of two adjacent pixels being fg or bg).
+     * On little-endian ARM a 32-bit store at p writes:
+     *   p[0] = low  16 bits   (first  pixel)
+     *   p[1] = high 16 bits   (second pixel)
+     * so:  pair[0b_col1_col0] = ((uint32_t)col1_px << 16) | col0_px
+     *
+     * Index bit layout:  bit1 = first pixel (1→fg, 0→bg)
+     *                    bit0 = second pixel (1→fg, 0→bg)           */
+    const uint32_t pair[4] = {
+        ((uint32_t)bg << 16) | bg,   /* 00 → p[0]=bg, p[1]=bg */
+        ((uint32_t)fg << 16) | bg,   /* 01 → p[0]=bg, p[1]=fg */
+        ((uint32_t)bg << 16) | fg,   /* 10 → p[0]=fg, p[1]=bg */
+        ((uint32_t)fg << 16) | fg,   /* 11 → p[0]=fg, p[1]=fg */
+    };
+
+    if (!clipped) {
+        /* Common case: all 4 pixels fit in the framebuffer.
+         * Two 32-bit packed stores per row replace four 16-bit stores.
+         * The entire 8-row loop is unrolled so the compiler can schedule
+         * the independent loads/stores and keep pair[] in registers.    */
+#define NSPIRE_DRAW_ROW(gy) do { \
+    uint8_t _m = mask[gy]; \
+    uint32_t _w0 = pair[(_m >> 2) & 3];  /* cols 0,1 */ \
+    uint32_t _w1 = pair[ _m       & 3];  /* cols 2,3 */ \
+    __builtin_memcpy(dst + (gy)*NSPIRE_SCREEN_W,     &_w0, 4); \
+    __builtin_memcpy(dst + (gy)*NSPIRE_SCREEN_W + 2, &_w1, 4); \
+} while (0)
+        NSPIRE_DRAW_ROW(0); NSPIRE_DRAW_ROW(1);
+        NSPIRE_DRAW_ROW(2); NSPIRE_DRAW_ROW(3);
+        NSPIRE_DRAW_ROW(4); NSPIRE_DRAW_ROW(5);
+        NSPIRE_DRAW_ROW(6); NSPIRE_DRAW_ROW(7);
+#undef NSPIRE_DRAW_ROW
+    } else {
+        /* Clipped case: only the rightmost terminal column ever reaches here;
+         * write 1–3 pixels with individual 16-bit stores. */
+        for (int gy = 0; gy < FONT_SRC_H; gy++, dst += NSPIRE_SCREEN_W) {
+            uint8_t m = mask[gy];
+            dst[0] = (m & 0x08) ? fg : bg;
+            if (draw > 1) dst[1] = (m & 0x04) ? fg : bg;
+            if (draw > 2) dst[2] = (m & 0x02) ? fg : bg;
+        }
+    }
+    s_dirty_rows |= 1u << row;
     s_framebuf_dirty = true;
 }
 
@@ -1164,23 +1250,144 @@ void nspire_fill_cells(int col, int row, int ncols, nspire_pixel_t colour)
      * Used by the Term_wipe hook to avoid the per-character overhead of
      * nspire_draw_char when erasing spans of cells.
      *
-     * Applies NSPIRE_X_OFFSET so that the erased region matches where
-     * nspire_draw_char places glyphs.  Individual 16-bit stores are used
-     * because the offset makes the address no longer 4-byte aligned. */
-    int width_px = ncols * NSPIRE_FONT_W;
-    int base_idx = row * NSPIRE_FONT_H * NSPIRE_SCREEN_W
-                   + col * NSPIRE_FONT_W
-                   + NSPIRE_X_OFFSET; /* 1-pixel left-bezel compensation */
-    /* Clip width to stay within the framebuffer */
-    int avail = NSPIRE_SCREEN_W - (col * NSPIRE_FONT_W + NSPIRE_X_OFFSET);
-    if (width_px > avail)
-        width_px = avail;
+     * With NSPIRE_X_OFFSET=1 the base pixel address is always at a 2-byte
+     * boundary that is NOT 4-byte aligned (byte offset = 8*col+2, ≡2 mod 4).
+     * We handle this with one leading 16-bit store to reach 4-byte alignment,
+     * then 32-bit packed stores for the bulk of the row, then an optional
+     * trailing 16-bit store.  This halves the number of memory transactions
+     * vs the previous per-pixel 16-bit loop. */
+    const int base_px  = col * NSPIRE_FONT_W + NSPIRE_X_OFFSET;
+    const int avail    = NSPIRE_SCREEN_W - base_px;
+    int       width_px = ncols * NSPIRE_FONT_W;
+    if (width_px > avail) width_px = avail;
+    if (width_px <= 0) return;
+
+    const uint32_t fill32 = ((uint32_t)colour << 16) | colour;
 
     for (int gy = 0; gy < NSPIRE_FONT_H; gy++) {
-        nspire_pixel_t *r = framebuf + base_idx + gy * NSPIRE_SCREEN_W;
-        for (int i = 0; i < width_px; i++)
-            r[i] = colour;
+        nspire_pixel_t *p = framebuf
+                            + (row * NSPIRE_FONT_H + gy) * NSPIRE_SCREEN_W
+                            + base_px;
+        int n = width_px;
+
+        /* One leading 16-bit store aligns the pointer to a 4-byte boundary
+         * (base_px is always ≡2 mod 4, so this always fires). */
+        if ((uintptr_t)p & 2) {
+            *p++ = colour;
+            n--;
+        }
+
+        /* 32-bit bulk fill: two pixels per store */
+        uint32_t *w = (uint32_t *)p;
+        int pairs = n >> 1;
+        for (int i = 0; i < pairs; i++)
+            w[i] = fill32;
+
+        /* One optional trailing 16-bit store for an odd pixel count */
+        if (n & 1)
+            p[n - 1] = colour;
     }
+    s_dirty_rows |= 1u << row;
+    s_framebuf_dirty = true;
+}
+
+/**
+ * Draw n characters from wide-char string s at terminal cell (col, row),
+ * all sharing the same fg/bg colours (as batched by Term_fresh_row_both).
+ *
+ * Saves vs n × nspire_draw_char():
+ *   • row_base pointer computed once (avoids n-1 multiply-add sequences)
+ *   • pair[4] table computed once per span instead of per glyph
+ *   • clipping only checked for the final glyph
+ */
+void nspire_draw_chars(int col, int row, int n,
+                       nspire_pixel_t fg, nspire_pixel_t bg,
+                       const wchar_t *s)
+{
+    /* Base address: first pixel of glyph 0.  Each subsequent glyph is
+     * +i*NSPIRE_FONT_W from here — one add instead of a full MUL+ADD. */
+    nspire_pixel_t *row_base = framebuf
+                               + row * NSPIRE_FONT_H * NSPIRE_SCREEN_W
+                               + col * NSPIRE_FONT_W
+                               + NSPIRE_X_OFFSET;
+
+    /* Only the very last glyph can have its right edge clipped. */
+    const int last_end_px = (col + n - 1) * NSPIRE_FONT_W
+                            + NSPIRE_X_OFFSET + NSPIRE_FONT_W;
+    const int last_draw   = (last_end_px > NSPIRE_SCREEN_W)
+                            ? NSPIRE_FONT_W - (last_end_px - NSPIRE_SCREEN_W)
+                            : NSPIRE_FONT_W;
+    const int last_clipped = (last_draw < NSPIRE_FONT_W);
+
+    if (fg == bg) {
+        /* Solid-colour span — no mask lookup needed at all. */
+        const uint32_t fill = ((uint32_t)fg << 16) | fg;
+        int i, gy;
+        for (i = 0; i < n; i++) {
+            nspire_pixel_t *d = row_base + i * NSPIRE_FONT_W;
+            if (!last_clipped || i < n - 1) {
+#define NSPIRE_FILL_ROWB(gy) do { \
+    __builtin_memcpy(d + (gy)*NSPIRE_SCREEN_W,     &fill, 4); \
+    __builtin_memcpy(d + (gy)*NSPIRE_SCREEN_W + 2, &fill, 4); \
+} while (0)
+                NSPIRE_FILL_ROWB(0); NSPIRE_FILL_ROWB(1);
+                NSPIRE_FILL_ROWB(2); NSPIRE_FILL_ROWB(3);
+                NSPIRE_FILL_ROWB(4); NSPIRE_FILL_ROWB(5);
+                NSPIRE_FILL_ROWB(6); NSPIRE_FILL_ROWB(7);
+#undef NSPIRE_FILL_ROWB
+            } else {
+                for (gy = 0; gy < FONT_SRC_H; gy++)
+                    for (int k = 0; k < last_draw; k++)
+                        d[gy * NSPIRE_SCREEN_W + k] = fg;
+            }
+        }
+        s_dirty_rows |= 1u << row;
+        s_framebuf_dirty = true;
+        return;
+    }
+
+    /* Precompute the 4-entry pixel-pair table once for the entire span.
+     * Bit layout identical to nspire_draw_char (see that function for
+     * full commentary on the little-endian memcpy trick). */
+    const uint32_t pair[4] = {
+        ((uint32_t)bg << 16) | bg,
+        ((uint32_t)fg << 16) | bg,
+        ((uint32_t)bg << 16) | fg,
+        ((uint32_t)fg << 16) | fg,
+    };
+
+    for (int i = 0; i < n; i++) {
+        int c = (int)(s[i]);
+        if ((unsigned)c > 0xFF) c = 0x20;
+        const uint8_t *mask = s_glyph_mask[(unsigned char)c];
+        nspire_pixel_t *d   = row_base + i * NSPIRE_FONT_W;
+
+        if (!last_clipped || i < n - 1) {
+#define NSPIRE_DRAW_ROWB(gy) do { \
+    uint8_t _m = mask[gy]; \
+    uint32_t _w0 = pair[(_m >> 2) & 3]; \
+    uint32_t _w1 = pair[ _m       & 3]; \
+    __builtin_memcpy(d + (gy)*NSPIRE_SCREEN_W,     &_w0, 4); \
+    __builtin_memcpy(d + (gy)*NSPIRE_SCREEN_W + 2, &_w1, 4); \
+} while (0)
+            NSPIRE_DRAW_ROWB(0); NSPIRE_DRAW_ROWB(1);
+            NSPIRE_DRAW_ROWB(2); NSPIRE_DRAW_ROWB(3);
+            NSPIRE_DRAW_ROWB(4); NSPIRE_DRAW_ROWB(5);
+            NSPIRE_DRAW_ROWB(6); NSPIRE_DRAW_ROWB(7);
+#undef NSPIRE_DRAW_ROWB
+        } else {
+            /* Clipped final column: 1-3 pixels via individual stores. */
+            for (int gy = 0; gy < FONT_SRC_H; gy++) {
+                uint8_t m = mask[gy];
+                d[gy * NSPIRE_SCREEN_W + 0] = (m & 0x08) ? fg : bg;
+                if (last_draw > 1)
+                    d[gy * NSPIRE_SCREEN_W + 1] = (m & 0x04) ? fg : bg;
+                if (last_draw > 2)
+                    d[gy * NSPIRE_SCREEN_W + 2] = (m & 0x02) ? fg : bg;
+            }
+        }
+    }
+    s_dirty_rows |= 1u << row;
     s_framebuf_dirty = true;
 }
 
@@ -1210,6 +1417,7 @@ void nspire_draw_cursor(int col, int row)
         r[0]           = NSPIRE_CURSOR;   /* left edge  */
         r[px1 - px0]   = NSPIRE_CURSOR;   /* right edge */
     }
+    s_dirty_rows |= 1u << row;
     s_framebuf_dirty = true;
 }
 
