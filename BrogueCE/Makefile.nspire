@@ -1,0 +1,160 @@
+#------------------------------------------------------------------------------
+# Makefile.nspire
+#
+# Build BrogueCE as a TI-Nspire CX II Ndless application (.tns)
+#
+# Prerequisites
+# -------------
+#   The Ndless SDK must be on PATH (via build.sh or manual export):
+#     export PATH=$PATH:/home/matt3r/calculator-files/Ndless/ndless-sdk/bin
+#
+#   nspire-gcc (the ARM cross-compiler wrapper) must be available.
+#   POSIX-style make (GNU make works).
+#
+# Usage
+# -----
+#   cd BrogueCE
+#   make -f Makefile.nspire          # build brogue.tns
+#   make -f Makefile.nspire clean    # remove generated files
+#
+# On-calculator file layout
+# -------------------------
+#   /documents/brogue.tns            ← the executable
+#   /documents/brogue/               ← working directory
+#     BrogueHighScores.txt.tns       ← scores (auto-created on first run)
+#     <save>.broguesave.tns          ← save files
+#     <rec>.broguerec.tns            ← recordings
+#------------------------------------------------------------------------------
+
+# ---- Auto-detect SDK root via nspire-tools --------------------------------
+NDLESS_SDK := $(shell nspire-tools path)
+
+# ---- Toolchain -------------------------------------------------------------
+GCC      = nspire-gcc
+LD       = nspire-ld
+GENZEHN  = genzehn
+MAKE_PRG = make-prg
+
+# ---- Project ---------------------------------------------------------------
+EXE      = brogue
+VERSION  = 1.15.1
+
+# ---- Source directories ---------------------------------------------------
+SRCDIR   = src
+
+# ---- Compiler flags --------------------------------------------------------
+#
+# -Isrc/brogue          BrogueCE game headers
+# -Isrc/platform        platform headers (platform.h, etc.)
+# -Isrc/variants        variant headers
+# -Isrc/platform/nspire nspire-specific headers
+# -include …/nspire-compat.h   transparently wraps fopen/rename/remove
+#
+# -DBROGUE_NSPIRE       enables our nspire back-end
+# -DDATADIR=.           assets path (unused in text mode but required)
+# -DUSE_UNICODE         enable BrogueCE's Unicode glyph names (we map them
+#                       to ASCII locally in nspire_glyph_to_ascii)
+# -ffunction-sections   enables --gc-sections to drop unused code
+# -fdata-sections
+
+CFLAGS = -Wall -W -marm -Os \
+         -ffunction-sections -fdata-sections \
+         -I$(SRCDIR)/brogue \
+         -I$(SRCDIR)/platform \
+         -I$(SRCDIR)/variants \
+         -I$(SRCDIR)/platform/nspire \
+         -include $(SRCDIR)/platform/nspire/nspire-compat.h \
+         -DBROGUE_NSPIRE \
+         -DDATADIR=. \
+         -DUSE_UNICODE \
+         -DBROGUE_EXTRA_VERSION="" \
+         -std=c99 \
+         -Wno-parentheses \
+         -Wno-unused-result \
+         -Wformat \
+         -Wformat-overflow=0
+
+# ---- Linker flags ----------------------------------------------------------
+LDFLAGS = -Wl,--gc-sections \
+          -Wl,--allow-multiple-definition \
+          -Wl,--defsym=_fini=0 \
+          -L$(NDLESS_SDK)lib \
+          -lndls -lsyscalls -lm
+
+# ---- Zehn packaging --------------------------------------------------------
+ZEHNFLAGS = --name "BrogueCE $(VERSION)" --uses-lcd-blit 0
+
+# ---- BrogueCE game sources -------------------------------------------------
+BROGUE_SRCS := \
+    $(SRCDIR)/brogue/Architect.c \
+    $(SRCDIR)/brogue/Buttons.c \
+    $(SRCDIR)/brogue/Combat.c \
+    $(SRCDIR)/brogue/Dijkstra.c \
+    $(SRCDIR)/brogue/Globals.c \
+    $(SRCDIR)/brogue/GlobalsBase.c \
+    $(SRCDIR)/brogue/Grid.c \
+    $(SRCDIR)/brogue/IO.c \
+    $(SRCDIR)/brogue/Items.c \
+    $(SRCDIR)/brogue/Light.c \
+    $(SRCDIR)/brogue/MainMenu.c \
+    $(SRCDIR)/brogue/Math.c \
+    $(SRCDIR)/brogue/Monsters.c \
+    $(SRCDIR)/brogue/Movement.c \
+    $(SRCDIR)/brogue/PowerTables.c \
+    $(SRCDIR)/brogue/Recordings.c \
+    $(SRCDIR)/brogue/RogueMain.c \
+    $(SRCDIR)/brogue/SeedCatalog.c \
+    $(SRCDIR)/brogue/Time.c \
+    $(SRCDIR)/brogue/Utilities.c \
+    $(SRCDIR)/brogue/Wizard.c
+
+# ---- Variant sources -------------------------------------------------------
+VARIANT_SRCS := \
+    $(SRCDIR)/variants/GlobalsBrogue.c \
+    $(SRCDIR)/variants/GlobalsRapidBrogue.c \
+    $(SRCDIR)/variants/GlobalsBulletBrogue.c
+
+# ---- Platform sources (text-mode, Nspire-specific) -------------------------
+PLATFORM_SRCS := \
+    $(SRCDIR)/platform/platformdependent.c \
+    $(SRCDIR)/platform/null-platform.c \
+    $(SRCDIR)/platform/nspire-platform.c \
+    $(SRCDIR)/platform/main-nspire.c \
+    $(SRCDIR)/platform/nspire/nspire-draw.c \
+    $(SRCDIR)/platform/nspire/nspire-event.c \
+    $(SRCDIR)/platform/nspire/nspire-input.c \
+    $(SRCDIR)/platform/nspire/nspire-fopen.c
+
+ALL_SRCS = $(BROGUE_SRCS) $(VARIANT_SRCS) $(PLATFORM_SRCS)
+OBJS     = $(ALL_SRCS:.c=.o)
+
+# ---- Build rules -----------------------------------------------------------
+.DEFAULT_GOAL := all
+.PHONY: all clean
+
+all: $(EXE).tns
+
+# Subdirectory compile rules (must come before the generic %.o rule)
+$(SRCDIR)/platform/nspire/%.o: $(SRCDIR)/platform/nspire/%.c
+	$(GCC) $(CFLAGS) -c $< -o $@
+
+$(SRCDIR)/brogue/%.o: $(SRCDIR)/brogue/%.c
+	$(GCC) $(CFLAGS) -c $< -o $@
+
+$(SRCDIR)/variants/%.o: $(SRCDIR)/variants/%.c
+	$(GCC) $(CFLAGS) -c $< -o $@
+
+$(SRCDIR)/platform/%.o: $(SRCDIR)/platform/%.c
+	$(GCC) $(CFLAGS) -c $< -o $@
+
+$(EXE).elf: $(OBJS)
+	$(LD) $(OBJS) -o $@ $(LDFLAGS)
+
+$(EXE).tns: $(EXE).elf
+	$(GENZEHN) --input $< --output $(EXE).zehn $(ZEHNFLAGS)
+	$(MAKE_PRG) $(EXE).zehn $@
+	rm -f $(EXE).zehn
+
+clean:
+	rm -f $(OBJS)
+	rm -f $(EXE).elf $(EXE).tns $(EXE).zehn

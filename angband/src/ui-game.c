@@ -754,8 +754,9 @@ static bool start_game(bool new_game)
 	return true;
 }
 
-/* Forward declaration so select_savefile() can use it. */
+/* Forward declarations so select_savefile() can use them. */
 static void alive_score_sidecar_path(char *buf, size_t len, const char *spath);
+static void update_score_sidecar_for_death(const char *spath);
 
 /**
  * Help select_savefile():  clean up the array of strings
@@ -1157,18 +1158,29 @@ static void write_alive_score_sidecar(const char *spath)
 }
 
 /**
- * Delete the score sidecar when a character dies.
- * Their score is entered into scores.raw instead.
+ * Overwrite the score sidecar with the character's final (dead) score.
+ * Keeps the sidecar present so the Hall of Fame can show dead characters.
  */
-static void delete_alive_score_sidecar(const char *spath)
+static void update_score_sidecar_for_death(const char *spath)
 {
 	char pts_path[1024];
+	char died_from[80];
+	time_t death_time;
+	struct high_score entry;
+	ang_file *f;
 
 	alive_score_sidecar_path(pts_path, sizeof(pts_path), spath);
+
+	my_strcpy(died_from, player->died_from, sizeof(died_from));
+	(void)time(&death_time);
+	build_score(&entry, player, died_from, &death_time);
+
 	safe_setuid_grab();
-	if (file_exists(pts_path))
-		file_delete(pts_path);
+	f = file_open(pts_path, MODE_WRITE, FTYPE_RAW);
 	safe_setuid_drop();
+	if (!f) return;
+	file_write(f, (char *)&entry, sizeof(entry));
+	file_close(f);
 }
 
 /**
@@ -1302,8 +1314,8 @@ void close_game(bool prompt_failed_save)
 				event_signal(EVENT_MESSAGE_FLUSH);
 			}
 		}
-		/* Score is now in scores.raw; remove the alive sidecar */
-		delete_alive_score_sidecar(savefile);
+		/* Update the sidecar with the death score for the Hall of Fame */
+		update_score_sidecar_for_death(savefile);
 	} else {
 		/* Save the game */
 		while (prompting && !save_game_checked()) {
@@ -1316,7 +1328,7 @@ void close_game(bool prompt_failed_save)
 		if (Term->mapped_flag) {
 			struct keypress ch;
 
-			prt("Press Enter (or Esc).", 0, 40);
+			prt("Press Return (or Escape).", 0, 40);
 			ch = inkey();
 			if (ch.code != ESCAPE)
 				predict_score(false);

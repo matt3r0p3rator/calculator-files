@@ -170,9 +170,9 @@ static void display_scores_aux(const struct high_score scores[], int from,
 
 		/* Wait for response; prompt centered on 80 character line */
 		if (allow_scrolling) {
-				prt("[Press Esc to exit, arrow-up for prior page, any other key for next page.]", 23, 6);
+			prt("[Press ESC to exit, up for prior page, any other key for next page.]", 23, 6);
 		} else {
-				prt("[Press Esc to exit, any other key to page forward till done.]", 23, 9);
+			prt("[Press ESC to exit, any other key to page forward till done.]", 23, 9);
 		}
 		ch = inkey();
 		prt("", 23, 0);
@@ -232,19 +232,21 @@ void predict_score(bool allow_scrolling)
 
 
 /**
- * Combine dead/retired scores from scores.raw with alive-character .pts.tns
- * sidecar files and display the merged Hall of Fame.
+ * Combine dead/retired scores from scores.raw with all .pts.tns sidecar
+ * files (alive and dead) and display the merged Hall of Fame.
+ * Dead sidecar entries act as a backup when scores.raw write failed.
  */
 static void show_scores_with_alive(void)
 {
 	struct high_score scores[MAX_HISCORES];
+	size_t nscores;
 	ang_dir *d;
 	char fname[256];
 
-	/* Start with dead/retired characters from scores.raw */
-	highscore_read(scores, N_ELEMENTS(scores));
+	/* Start with dead/retired characters from the scores file. */
+	nscores = highscore_read(scores, N_ELEMENTS(scores));
 
-	/* Merge alive-character .pts.tns sidecar files into the list. */
+	/* Add characters from .pts.tns sidecar files. */
 	safe_setuid_grab();
 	d = my_dopen(ANGBAND_DIR_SAVE);
 	safe_setuid_drop();
@@ -252,7 +254,7 @@ static void show_scores_with_alive(void)
 		while (1) {
 			char pts_path[1024];
 			bool have_name;
-			struct high_score alive;
+			struct high_score entry;
 			ang_file *f;
 			bool have_read;
 
@@ -261,7 +263,6 @@ static void show_scores_with_alive(void)
 			safe_setuid_drop();
 			if (!have_name) break;
 
-			/* Only process sidecar files. */
 			if (!suffix(fname, ".pts.tns")) continue;
 
 			path_build(pts_path, sizeof(pts_path),
@@ -271,12 +272,31 @@ static void show_scores_with_alive(void)
 			f = file_open(pts_path, MODE_READ, FTYPE_RAW);
 			safe_setuid_drop();
 			if (!f) continue;
-			have_read = (file_read(f, (char *)&alive,
-				sizeof(alive)) == (int)sizeof(alive));
+			have_read = (file_read(f, (char *)&entry,
+				sizeof(entry)) == (int)sizeof(entry));
 			file_close(f);
-			if (!have_read || !highscore_valid(&alive)) continue;
+			if (!have_read || !highscore_valid(&entry)) continue;
 
-			highscore_add(&alive, scores, N_ELEMENTS(scores));
+			/*
+			 * Alive entries are never in scores.raw; always add.
+			 * Dead entries are normally in scores.raw already;
+			 * only add if not already present (backup for stale
+			 * lock file or other scores.raw write failure).
+			 */
+			if (!streq(entry.how, "still alive")) {
+				bool already_present = false;
+				size_t i;
+				for (i = 0; i < nscores; i++) {
+					if (streq(scores[i].who, entry.who) &&
+					    streq(scores[i].pts, entry.pts)) {
+						already_present = true;
+						break;
+					}
+				}
+				if (already_present) continue;
+			}
+
+			highscore_add(&entry, scores, N_ELEMENTS(scores));
 		}
 		my_dclose(d);
 	}
