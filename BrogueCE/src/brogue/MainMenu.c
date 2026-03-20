@@ -179,7 +179,11 @@ static void antiAlias(unsigned char mask[COLS][ROWS]) {
     }
 }
 
+#ifdef BROGUE_NSPIRE
+#define MENU_TITLE_OFFSET_X (0)
+#else
 #define MENU_TITLE_OFFSET_X (-7)
+#endif
 #define MENU_TITLE_OFFSET_Y (-2)
 
 static void initializeMenuFlames(boolean includeTitle,
@@ -227,9 +231,13 @@ static void initializeMenuFlames(boolean includeTitle,
         for (i=0; i<gameConst->mainMenuTitleWidth; i++) {
             for (j=0; j<gameConst->mainMenuTitleHeight; j++) {
                 if (mainMenuTitle[j * gameConst->mainMenuTitleWidth + i] != ' ') {
-                    colors[(COLS - gameConst->mainMenuTitleWidth)/2 + i + MENU_TITLE_OFFSET_X][(ROWS - gameConst->mainMenuTitleHeight)/2 + j + MENU_TITLE_OFFSET_Y] = &flameTitleColor;
-                    colorSourceCount++;
-                    mask[(COLS - gameConst->mainMenuTitleWidth)/2 + i + MENU_TITLE_OFFSET_X][(ROWS - gameConst->mainMenuTitleHeight)/2 + j + MENU_TITLE_OFFSET_Y] = 100;
+                    short wx = (COLS - gameConst->mainMenuTitleWidth)/2 + i + MENU_TITLE_OFFSET_X;
+                    short wy = (ROWS - gameConst->mainMenuTitleHeight)/2 + j + MENU_TITLE_OFFSET_Y;
+                    if (wx >= 0 && wx < COLS && wy >= 0 && wy < ROWS + MENU_FLAME_ROW_PADDING) {
+                        colors[wx][wy] = &flameTitleColor;
+                        colorSourceCount++;
+                        mask[wx][wy] = 100;
+                    }
                }
             }
         }

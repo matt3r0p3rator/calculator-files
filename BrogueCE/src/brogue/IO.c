@@ -4116,15 +4116,25 @@ void printHelpScreen() {
     clearDisplayBuffer(&dbuf);
 
     // Print the text to the dbuf.
+    // On Nspire (80 cols), starting at col 0 gives full 80-col width.
+    // On normal screens (100 cols), start at mapToWindowX(1)=22.
+#ifdef BROGUE_NSPIRE
+    const short helpStartX = 0;
+#else
+    const short helpStartX = mapToWindowX(1);
+#endif
     for (i=0; i<BROGUE_HELP_LINE_COUNT && i < ROWS; i++) {
-        printString(helpText[i], mapToWindowX(1), i, &itemMessageColor, &black, &dbuf);
+        printString(helpText[i], helpStartX, i, &itemMessageColor, &black, &dbuf);
+    }
+    // If the help text overflows the screen, ensure the continue prompt is visible at the last row.
+    if (BROGUE_HELP_LINE_COUNT > ROWS) {
+        printString(helpText[BROGUE_HELP_LINE_COUNT - 1], helpStartX, ROWS - 1, &itemMessageColor, &black, &dbuf);
     }
 
-    // Set the dbuf opacity.
-    for (i=0; i<DCOLS; i++) {
+    // Set the dbuf opacity for all visible columns.
+    for (i=0; i<COLS; i++) {
         for (j=0; j<ROWS; j++) {
-            //plotCharWithColor(' ', (windowpos) { mapToWindowX(i), j }, &black, &black);
-            dbuf.cells[mapToWindowX(i)][j].opacity = INTERFACE_OPACITY;
+            dbuf.cells[i][j].opacity = INTERFACE_OPACITY;
         }
     }
 
@@ -4251,6 +4261,16 @@ void printDiscoveriesScreen() {
     printString("-- RINGS --", mapToWindowX(2), y += gameConst->numberScrollKinds + 1, &flavorTextColor, &black, &dbuf);
     printDiscoveries(RING, NUMBER_RING_KINDS, G_RING, mapToWindowX(3), ++y, &dbuf);
 
+#ifdef BROGUE_NSPIRE
+    printString("-- POTIONS --", mapToWindowX(22), y = mapToWindowY(1), &flavorTextColor, &black, &dbuf);
+    printDiscoveries(POTION, gameConst->numberPotionKinds, G_POTION, mapToWindowX(23), ++y, &dbuf);
+
+    printString("-- STAFFS --", mapToWindowX(40), y = mapToWindowY(1), &flavorTextColor, &black, &dbuf);
+    printDiscoveries(STAFF, NUMBER_STAFF_KINDS, G_STAFF, mapToWindowX(41), ++y, &dbuf);
+
+    printString("-- WANDS --", mapToWindowX(40), y += NUMBER_STAFF_KINDS + 1, &flavorTextColor, &black, &dbuf);
+    printDiscoveries(WAND, gameConst->numberWandKinds, G_WAND, mapToWindowX(41), ++y, &dbuf);
+#else
     printString("-- POTIONS --", mapToWindowX(29), y = mapToWindowY(1), &flavorTextColor, &black, &dbuf);
     printDiscoveries(POTION, gameConst->numberPotionKinds, G_POTION, mapToWindowX(30), ++y, &dbuf);
 
@@ -4259,6 +4279,7 @@ void printDiscoveriesScreen() {
 
     printString("-- WANDS --", mapToWindowX(53), y += NUMBER_STAFF_KINDS + 1, &flavorTextColor, &black, &dbuf);
     printDiscoveries(WAND, gameConst->numberWandKinds, G_WAND, mapToWindowX(54), ++y, &dbuf);
+#endif
 
     printString(KEYBOARD_LABELS ? "-- press any key to continue --" : "-- touch anywhere to continue --",
                 mapToWindowX(20), mapToWindowY(DROWS-2), &itemMessageColor, &black, &dbuf);
@@ -4301,7 +4322,7 @@ void printHighScores(boolean hiliteMostRecent) {
     applyColorAverage(&scoreColor, &itemMessageColor, 100);
     printString("-- HIGH SCORES --", (COLS - 17 + 1) / 2, 0, &scoreColor, &black, 0);
 
-    for (i = 0; i < HIGH_SCORES_COUNT && list[i].score > 0; i++) {
+    for (i = 0; i < HIGH_SCORES_COUNT && list[i].score > 0 && i + 2 < ROWS - 1; i++) {
         scoreColor = black;
         if (i == hiliteLineNum) {
             applyColorAverage(&scoreColor, &itemMessageColor, 100);
@@ -4994,6 +5015,12 @@ short printTextBox(char *textBuf, short x, short y, short width,
             // move the box one space to the left.
             x2--;
         }
+    }
+
+    // If the text box still overflows the screen height (e.g. on shorter screens),
+    // slide it upward so the content is fully visible.
+    if (y2 + lineCount > ROWS - 2) {
+        y2 = (ROWS - 2 - lineCount > 0) ? ROWS - 2 - lineCount : 0;
     }
 
     if (buttonCount > 0) {

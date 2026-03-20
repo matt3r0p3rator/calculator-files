@@ -2,8 +2,9 @@
 #include "../include/ti_gui.hpp"
 #include "../include/app.hpp"
 #include "../include/gauss_app.hpp"
-#include "../include/hello_app.hpp"
 #include "../include/chemistry.hpp"
+#include "../include/scratchpad_app.hpp"
+#include "../include/inverse_app.hpp"
 #include <vector>
 
 extern "C" void _fini() {}
@@ -15,9 +16,13 @@ int main(void) {
     
     GaussApp gauss;
     ChemistryApp chemistry;
+    InverseApp inverse;
+    //ScratchpadApp scratchpad;
     
     apps.push_back(&gauss);
     apps.push_back(&chemistry);
+    apps.push_back(&inverse);
+    //apps.push_back(&scratchpad);
 
     int selected_app = 0;
     bool running = true;
