@@ -33,4 +33,13 @@ rogueEvent nspire_event_get(void);
 /** Enqueue a keyboard event. */
 void nspire_event_put_key(signed long key, boolean controlKey, boolean shiftKey);
 
+/**
+ * Enqueue a mouse event.
+ * @param eventType  MOUSE_UP, MOUSE_DOWN, MOUSE_ENTERED_CELL, etc.
+ * @param x          Window column (terminal x, 0-based)
+ * @param y          Window row    (terminal y, 0-based)
+ */
+void nspire_event_put_mouse(int eventType, int x, int y);
+
 #endif /* NSPIRE_EVENT_H */
+

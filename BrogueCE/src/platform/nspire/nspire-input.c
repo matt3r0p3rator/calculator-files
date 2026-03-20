@@ -134,17 +134,35 @@ static const key_entry_t s_key_table[] = {
     { &KEY_NSPIRE_LEFT,       LEFT_ARROW,  LEFT_ARROW  },
     { &KEY_NSPIRE_RIGHT,      RIGHT_ARROW, RIGHT_ARROW },
 
-    /* --- Diagonal touchpad directions → numpad roguelike movement --- */
-    { &KEY_NSPIRE_UPRIGHT,    '9', '9' },
-    { &KEY_NSPIRE_RIGHTDOWN,  '3', '3' },
-    { &KEY_NSPIRE_DOWNLEFT,   '1', '1' },
-    { &KEY_NSPIRE_LEFTUP,     '7', '7' },
+    /* --- Diagonal touchpad directions → numpad roguelike movement ---
+     * NUMPAD_7/9/3/1 = '7'/'9'/'3'/'1' in BrogueCE (Rogue.h:1219-1228).
+     * Shifted versions send uppercase vi-letters so BrogueCE detects
+     * shiftKey=true and runs in that direction (4 steps).            */
+    { &KEY_NSPIRE_UPRIGHT,    '9', 'U' },   /* NE: walk/run             */
+    { &KEY_NSPIRE_RIGHTDOWN,  '3', 'N' },   /* SE: walk/run             */
+    { &KEY_NSPIRE_DOWNLEFT,   '1', 'B' },   /* SW: walk/run             */
+    { &KEY_NSPIRE_LEFTUP,     '7', 'Y' },   /* NW: walk/run             */
 
     /* --- Touchpad center click → wait in place --- */
     { &KEY_NSPIRE_CLICK,      '.',  '.' },
 
     /* --- Tab --- */
     { &KEY_NSPIRE_TAB,        '\t', '\t' },
+
+    /* --- Dedicated shortcuts (math keys repurposed for gameplay) ---
+     *
+     *  CAT  (catalog)  → RETURN_KEY '\012'
+     *       Works as an extra "cursor mode / confirm" key; equivalent
+     *       to pressing Enter.  Handy for entering autotravel mode and
+     *       confirming targets with one thumb without leaving the
+     *       touchpad.  In-game: Enter on dungeon view → showCursor() →
+     *       arrows move cursor → CAT/Enter confirm → travel().
+     *
+     *  TRIG (trig)     → EXPLORE_KEY 'x'
+     *       Auto-explores the level in one press.
+     */
+    { &KEY_NSPIRE_CAT,        '\012', '\012' },
+    { &KEY_NSPIRE_TRIG,       'x',    'x'    },
 
     { NULL, 0, 0 }   /* sentinel */
 };
@@ -205,9 +223,14 @@ void nspire_input_scan(void)
             &KEY_NSPIRE_ESC, &KEY_NSPIRE_RET, &KEY_NSPIRE_ENTER,
             &KEY_NSPIRE_DEL, &KEY_NSPIRE_HOME, &KEY_NSPIRE_MENU
         };
-        /* BrogueCE codes for these specials */
+        /* BrogueCE codes for these specials.
+         * RETURN_KEY = '\012' (0x0A).  Both RET (small enter) and ENTER
+         * (big enter) send RETURN_KEY so the player can:
+         *   - Enter cursor/autotravel mode (showCursor) in the dungeon
+         *   - Confirm a cursor target (travel / interact)
+         *   - Confirm selections in menus and inventory             */
         const signed long sp_codes[] = {
-            ESCAPE_KEY, '\r', '\r',
+            ESCAPE_KEY, '\012', '\012',
             DELETE_KEY, ESCAPE_KEY, ESCAPE_KEY   /* HOME/MENU → ESC */
         };
         const int SP_COUNT = 6;

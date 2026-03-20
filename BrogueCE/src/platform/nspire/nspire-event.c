@@ -72,3 +72,22 @@ void nspire_event_put_key(signed long key, boolean controlKey, boolean shiftKey)
 
     s_write = next_write;
 }
+
+void nspire_event_put_mouse(int eventType, int x, int y)
+{
+    if (!s_buf)
+        return;
+
+    uint16_t next_write = s_write + 1;
+    if (next_write >= NSPIRE_EVENT_BUF_LEN) next_write = 0;
+    if (next_write == s_read) return;  /* full */
+
+    s_buf[s_write].valid            = true;
+    s_buf[s_write].ev.eventType     = eventType;
+    s_buf[s_write].ev.param1        = x;
+    s_buf[s_write].ev.param2        = y;
+    s_buf[s_write].ev.controlKey    = false;
+    s_buf[s_write].ev.shiftKey      = false;
+
+    s_write = next_write;
+}

@@ -689,6 +689,27 @@ fileEntry *listFiles(short *fileCount, char **namebuffer) {
         *fileCount = 0;
     }
 
+#ifdef BROGUE_NSPIRE
+    /* The Nspire OS requires every file to end in ".tns", so all save files
+     * on disk are named e.g. "LastGame.broguesave.tns".  Strip the ".tns"
+     * suffix here so the rest of the code (dialogChooseFile suffix filter,
+     * button text, openFile) sees the conventional ".broguesave" names.
+     * nspire_fopen / nspire_rename / nspire_remove transparently re-add
+     * ".tns" when the file is actually opened, renamed, or deleted.       */
+    if (files != NULL) {
+        for (short fi = 0; fi < *fileCount; fi++) {
+            int flen = strlen(files[fi].path);
+            if (flen > 4
+                && files[fi].path[flen-4] == '.'
+                && files[fi].path[flen-3] == 't'
+                && files[fi].path[flen-2] == 'n'
+                && files[fi].path[flen-1] == 's') {
+                files[fi].path[flen - 4] = '\0';
+            }
+        }
+    }
+#endif
+
     freeFilelist(list);
 
     return files;
