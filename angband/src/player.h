@@ -481,6 +481,7 @@ struct player_upkeep {
 
 	int running;			/* Running counter */
 	bool running_firststep;		/* Is this our first step running or following a precomputed path? */
+	bool auto_exploring;		/* True while continuous auto-explore is active */
 
 	struct object **quiver;	/* Quiver objects */
 	struct object **inven;	/* Inventory objects */

@@ -87,7 +87,8 @@
 #define BG_BLACK 0	/* The set number for the black-background glyphs */
 #define BG_SAME  1	/* The set number for the same-background glyphs */
 #define BG_DARK  2	/* The set number for the dark-background glyphs */
-#define BG_MAX   3	/* The max number of backgrounds */
+#define BG_PATH  3	/* Auto-explore path highlight (nspire: dark-blue bg) */
+#define BG_MAX   4	/* The max number of backgrounds */
 
 /**
  * A game color.

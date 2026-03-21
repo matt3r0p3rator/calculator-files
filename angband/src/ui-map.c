@@ -130,10 +130,16 @@ static void grid_get_attr(struct grid_data *g, int *a)
 	}
 	/* Hybrid or block walls */
 	if (use_graphics == GRAPHICS_NONE && feat_is_wall(g->f_idx)) {
+#ifdef USE_NSPIRE
+		/* On the tiny nspire screen, solid colour blocks for walls are
+		 * far easier to read than individual '#' characters. */
+		*a = *a + (MULT_BG * BG_SAME);
+#else
 		if (OPT(player, hybrid_walls))
 			*a = *a + (MULT_BG * BG_DARK);
 		else if (OPT(player, solid_walls))
 			*a = *a + (MULT_BG * BG_SAME);
+#endif
 	}
 }
 
@@ -328,6 +334,13 @@ void grid_data_as_text(struct grid_data *g, int *ap, wchar_t *cp, int *tap,
 
 		/* Get the "player" char */
 		c = monster_x_char[race->ridx];
+	}
+
+	/* Auto-explore path highlight: paint background of path cells.
+	 * Keep the foreground character colour so terrain/objects stay readable;
+	 * only the cell background changes to the BG_PATH shade. */
+	if (g->in_path && !g->is_player && !(a & 0x80)) {
+		a = (a % MAX_COLORS) + (MULT_BG * BG_PATH);
 	}
 
 	/* Result */

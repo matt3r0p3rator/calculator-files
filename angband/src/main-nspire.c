@@ -81,10 +81,24 @@ static void nspire_init_colours(void)
 {
     for (int i = 0; i < MAX_COLORS; i++) {
         /* angband_color_table[i] = { gamma, R, G, B }  (0–255 each) */
-        uint8_t r = angband_color_table[i][1];
-        uint8_t g = angband_color_table[i][2];
-        uint8_t b = angband_color_table[i][3];
-        s_colour_table[i] = nspire_rgb(r, g, b);
+        int r = angband_color_table[i][1];
+        int g = angband_color_table[i][2];
+        int b = angband_color_table[i][3];
+
+        /* Luma-preserving saturation boost (BT.601 coefficients, ×13/10).
+         * The nspire LCD looks washed-out at stock colours; boosting
+         * saturation 30% makes terrain, monsters and items much more
+         * visually distinct without changing perceived brightness. */
+        int luma = (299 * r + 587 * g + 114 * b) / 1000;
+        r = luma + (r - luma) * 13 / 10;
+        g = luma + (g - luma) * 13 / 10;
+        b = luma + (b - luma) * 13 / 10;
+        /* Clamp */
+        r = r < 0 ? 0 : (r > 255 ? 255 : r);
+        g = g < 0 ? 0 : (g > 255 ? 255 : g);
+        b = b < 0 ? 0 : (b > 255 ? 255 : b);
+
+        s_colour_table[i] = nspire_rgb((uint8_t)r, (uint8_t)g, (uint8_t)b);
     }
 }
 
@@ -246,6 +260,11 @@ static errr Term_text_nspire(int x, int y, int n, int a, const wchar_t *s)
         break;
     case BG_DARK:
         bg = s_colour_table[COLOUR_SHADE];
+        break;
+    case BG_PATH:
+        /* Auto-explore path: dark navy-blue background so the dungeon
+         * character is still readable while the route is clearly marked. */
+        bg = s_colour_table[COLOUR_BLUE];
         break;
     case BG_BLACK:
     default:

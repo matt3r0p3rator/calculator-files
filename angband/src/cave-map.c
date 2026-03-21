@@ -180,6 +180,9 @@ void map_info(struct loc grid, struct grid_data *g)
 		if (!monster_is_visible(mon)) g->m_idx = 0;
 	}
 
+	/* Auto-explore path highlight */
+	g->in_path = sqinfo_has(square(player->cave, grid)->info, SQUARE_PATH);
+
 	/* Rare random hallucination on non-outer walls */
 	if (g->hallucinate && g->m_idx == 0 && g->first_kind == 0) {
 		if (one_in_(128) && (int) g->f_idx != FEAT_PERM)

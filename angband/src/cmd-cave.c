@@ -311,8 +311,19 @@ void do_cmd_open(struct command *cmd)
 		more = do_cmd_open_aux(grid);
 	}
 
-	/* Cancel repeat unless we may continue */
-	if (!more) disturb(player);
+	if (!more) {
+		/* Success: for a background (auto-explore/pathfind) open, don't
+		 * disturb so the queued follow-up command (CMD_EXPLORE) survives.
+		 * For a regular interactive open, cancel repeat as normal. */
+		if (!cmd->background_command)
+			disturb(player);
+	} else if (cmd->background_command) {
+		/* Lock-pick failed while running a background open: abort so we
+		 * don't loop on the same locked door. */
+		explore_path_clear(player);
+		player->upkeep->auto_exploring = false;
+		cmdq_flush();
+	}
 }
 
 
@@ -1499,11 +1510,6 @@ void do_cmd_navigate_up(struct command *cmd)
  */
 void do_cmd_explore(struct command *cmd)
 {
-	/* Do nothing if autoexplore commands disabled. */
-	if (!OPT(player, autoexplore_commands)) {
-		return;
-	}
-
 	/* cancel if confused */
 	if (player->timed[TMD_CONFUSED]) {
 		msg("You cannot explore while confused.");
@@ -1531,10 +1537,12 @@ void do_cmd_explore(struct command *cmd)
 	player->upkeep->step_count = path_nearest_unknown(player, player->grid,
 		&player->upkeep->path_dest, &player->upkeep->steps);
 	if (player->upkeep->step_count > 0) {
+		player->upkeep->auto_exploring = true;
 		player->upkeep->running_firststep = true;
 		player->upkeep->running = player->upkeep->step_count;
 		/* Calculate torch radius */
 		player->upkeep->update |= (PU_TORCH);
+		explore_path_mark(player);
 		run_step(0);
 		return;
 	}

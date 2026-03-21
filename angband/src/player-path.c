@@ -1870,6 +1870,45 @@ static bool run_test(const struct player *p)
 }
 
 /**
+ * Mark all cells in the current auto-explore path with SQUARE_PATH so
+ * prt_map() can highlight them.
+ */
+void explore_path_mark(struct player *p)
+{
+	int i;
+	struct loc grid;
+
+	if (!p->cave || !p->upkeep->steps || p->upkeep->step_count <= 0)
+		return;
+
+	grid = p->grid;
+	/* steps[] is stored in reverse: steps[step_count-1] is first step */
+	for (i = p->upkeep->step_count - 1; i >= 0; i--) {
+		grid = loc_sum(grid, ddgrid[p->upkeep->steps[i]]);
+		if (square_in_bounds(p->cave, grid))
+			sqinfo_on(square(p->cave, grid)->info, SQUARE_PATH);
+	}
+
+	p->upkeep->redraw |= PR_MAP;
+}
+
+/**
+ * Clear all SQUARE_PATH flags set by explore_path_mark().
+ */
+void explore_path_clear(struct player *p)
+{
+	struct loc grid;
+
+	if (!p->cave) return;
+
+	for (grid.y = 0; grid.y < p->cave->height; grid.y++)
+		for (grid.x = 0; grid.x < p->cave->width; grid.x++)
+			sqinfo_off(square(p->cave, grid)->info, SQUARE_PATH);
+
+	p->upkeep->redraw |= PR_MAP;
+}
+
+/**
  * Take one step along the current "run" path
  *
  * Called with a real direction to begin a new run, and with zero
@@ -1901,7 +1940,7 @@ void run_step(int dir)
 				return;
 			}
 		} else if (player->upkeep->step_count <= 0) {
-			/* Pathfinding, and the path is finished */
+			/* Pathfinding step count exhausted without running reaching 0 */
 			disturb(player);
 			return;
 		} else {
@@ -1911,18 +1950,30 @@ void run_step(int dir)
 			struct loc grid;
 			struct object *obj;
 
+			/* During auto-explore, stop if any monster comes into view */
+			if (player->upkeep->auto_exploring &&
+					player_has_monster_in_view(player)) {
+				msg("You see a monster!");
+				disturb(player);
+				return;
+			}
+
 			assert(player->upkeep->steps);
 			grid = loc_sum(player->grid, ddgrid[next_step_dir]);
 
 			/*
 			 * Automatically deal with some impassable
 			 * terrain if that grid and its immediate neighors are
-			 * known.  Since disturb() flushes queued commands,
-			 * first stop running before pushing the commands to
-			 * deal with the terrain and restart pathfinding.
+			 * known (for pathfinding), or unconditionally when
+			 * auto-exploring (we want to open every door we meet).
+			 * Since disturb() flushes queued commands, first stop
+			 * running before pushing the commands to deal with the
+			 * terrain and restart pathfinding / exploring.
 			 */
 			if (square_iscloseddoor(player->cave, grid)) {
-				if (count_neighbors(NULL, cave, grid,
+				bool exploring = player->upkeep->auto_exploring;
+				if (exploring
+						|| count_neighbors(NULL, cave, grid,
 						square_isknown, true) == 9) {
 					struct loc dest =
 						player->upkeep->path_dest;
@@ -1932,15 +1983,22 @@ void run_step(int dir)
 					cmdq_peek()->background_command = 1;
 					cmd_set_arg_direction(cmdq_peek(),
 						"direction", next_step_dir);
-					cmdq_push(CMD_PATHFIND);
-					cmd_set_arg_point(cmdq_peek(),
-						"point", dest);
+					if (exploring) {
+						cmdq_push(CMD_EXPLORE);
+						cmdq_peek()->background_command = 1;
+					} else {
+						cmdq_push(CMD_PATHFIND);
+						cmd_set_arg_point(cmdq_peek(),
+							"point", dest);
+					}
 					return;
 				}
 			} else if (square_isrubble(player->cave, grid)
 					&& !square_ispassable(player->cave,
 					grid)) {
-				if (count_neighbors(NULL, cave, grid,
+				bool exploring = player->upkeep->auto_exploring;
+				if (exploring
+						|| count_neighbors(NULL, cave, grid,
 						square_isknown, true) == 9) {
 					struct loc dest =
 						player->upkeep->path_dest;
@@ -1950,9 +2008,14 @@ void run_step(int dir)
 					cmdq_peek()->background_command = 1;
 					cmd_set_arg_direction(cmdq_peek(),
 						"direction", next_step_dir);
-					cmdq_push(CMD_PATHFIND);
-					cmd_set_arg_point(cmdq_peek(),
-						"point", dest);
+					if (exploring) {
+						cmdq_push(CMD_EXPLORE);
+						cmdq_peek()->background_command = 1;
+					} else {
+						cmdq_push(CMD_PATHFIND);
+						cmd_set_arg_point(cmdq_peek(),
+							"point", dest);
+					}
 					return;
 				}
 			}
@@ -2064,6 +2127,76 @@ void run_step(int dir)
 	} else if (player->upkeep->steps) {
 		mem_free(player->upkeep->steps);
 		player->upkeep->steps = NULL;
+
+		/* If auto-exploring, immediately find the next target */
+		if (player->upkeep->auto_exploring) {
+			/* Stop if a monster has come into view */
+			if (player_has_monster_in_view(player)) {
+				msg("You see a monster!");
+				player->upkeep->auto_exploring = false;
+				explore_path_clear(player);
+				return;
+			}
+
+			/*
+			 * path_nearest_unknown(passable=false) routes the
+			 * player to the passable tile ADJACENT to a door, not
+			 * through it.  When the path ends, the player is
+			 * standing right next to a closed door but
+			 * path_nearest_unknown would skip it (loc_eq check).
+			 * Scan adjacent squares: if there is a closed door
+			 * with unexplored (unknown) neighbors, open it first
+			 * then kick off a fresh CMD_EXPLORE.
+			 */
+			{
+				int di;
+				for (di = 1; di <= 9; di++) {
+					struct loc adj;
+					if (di == 5) continue;
+					adj = loc_sum(player->grid, ddgrid[di]);
+					if (!square_in_bounds(player->cave, adj))
+						continue;
+					if (!square_iscloseddoor(player->cave, adj))
+						continue;
+					/* Has at least one unknown neighbor? */
+					if (count_neighbors(NULL, player->cave,
+							adj, square_isknown,
+							false) == 8)
+						continue;
+					/* Open this door and resume exploring */
+					player->upkeep->auto_exploring = false;
+					explore_path_clear(player);
+					cmdq_push(CMD_OPEN);
+					cmdq_peek()->background_command = 1;
+					cmd_set_arg_direction(cmdq_peek(),
+						"direction", di);
+					cmdq_push(CMD_EXPLORE);
+					cmdq_peek()->background_command = 1;
+					return;
+				}
+			}
+
+			/* Find the next unexplored area */
+			player->upkeep->step_count = path_nearest_unknown(
+				player, player->grid,
+				&player->upkeep->path_dest,
+				&player->upkeep->steps);
+			if (player->upkeep->step_count > 0) {
+				player->upkeep->running = player->upkeep->step_count;
+				player->upkeep->update |= (PU_TORCH);
+				explore_path_clear(player);
+				explore_path_mark(player);
+				/* Queue the continuation */
+				cmdq_push(CMD_RUN);
+				cmdq_peek()->background_command = 1;
+				cmd_set_arg_direction(cmdq_peek(), "direction", 0);
+			} else {
+				msg("You have explored this area.");
+				player->upkeep->auto_exploring = false;
+				explore_path_clear(player);
+			}
+			return;
+		}
 	}
 }
 

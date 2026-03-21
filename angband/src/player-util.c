@@ -34,6 +34,7 @@
 #include "player-attack.h"
 #include "player-calcs.h"
 #include "player-history.h"
+#include "player-path.h"
 #include "player-quest.h"
 #include "player-spell.h"
 #include "player-timed.h"
@@ -1656,6 +1657,10 @@ void disturb(struct player *p)
 	/* Cancel running */
 	if (p->upkeep->running) {
 		p->upkeep->running = 0;
+		if (p->upkeep->auto_exploring) {
+			p->upkeep->auto_exploring = false;
+			explore_path_clear(p);
+		}
 		mem_free(p->upkeep->steps);
 		p->upkeep->steps = NULL;
 

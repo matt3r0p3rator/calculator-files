@@ -404,6 +404,10 @@ void html_screenshot(const char *path, int mode, term *other_term)
 				case BG_DARK:
 					bg_colour = COLOUR_SHADE;
 					break;
+				case BG_PATH:
+					/* Path highlight — treated as black for text export */
+					bg_colour = COLOUR_DARK;
+					break;
 				default:
 					assert((a >= 0)
 						&& (a < BG_MAX * MULT_BG));

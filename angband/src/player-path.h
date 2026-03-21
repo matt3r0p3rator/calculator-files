@@ -39,5 +39,7 @@ int find_path(struct player *p, struct loc start, struct loc dest,
 		int16_t **step_dirs);
 int pathfind_direction_to(struct loc from, struct loc to);
 void run_step(int dir);
+void explore_path_mark(struct player *p);
+void explore_path_clear(struct player *p);
 
 #endif /* !PLAYER_PATH_H */

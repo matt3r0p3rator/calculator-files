@@ -1,4 +1,4 @@
-ui-game.o: ui-game.c /usr/include/stdc-predef.h angband.h h-basic.h \
+ui-command.o: ui-command.c /usr/include/stdc-predef.h angband.h h-basic.h \
  autoconf.h /usr/include/ctype.h /usr/include/features.h \
  /usr/include/features-time64.h \
  /usr/include/x86_64-linux-gnu/bits/wordsize.h \
@@ -116,16 +116,13 @@ ui-game.o: ui-game.c /usr/include/stdc-predef.h angband.h h-basic.h \
  list-object-flags.h list-kind-flags.h list-stats.h \
  list-object-modifiers.h object.h z-quark.h z-dice.h z-expression.h \
  list-elements.h list-origins.h option.h list-options.h \
- list-player-flags.h cmds.h cave.h list-square-flags.h \
- list-terrain-flags.h list-terrain.h cmd-core.h datafile.h parser.h \
- list-parser-errors.h game-input.h game-world.h generate.h monster.h \
+ list-player-flags.h buildid.h cave.h list-square-flags.h \
+ list-terrain-flags.h list-terrain.h cmd-core.h cmds.h game-input.h \
+ game-world.h init.h datafile.h parser.h list-parser-errors.h monster.h \
  target.h mon-predicate.h mon-timed.h list-mon-timed.h mon-blows.h \
- list-mon-temp-flags.h list-mon-race-flags.h list-mon-spells.h \
- list-room-flags.h grafmode.h init.h mon-lore.h z-textblock.h mon-make.h \
- obj-knowledge.h obj-util.h player-attack.h player-calcs.h player-path.h \
- player-properties.h player-util.h savefile.h ui-birth.h ui-command.h \
- ui-term.h ui-event.h ui-context.h ui-input.h ui-death.h ui-display.h \
- ui-game.h ui-help.h ui-init.h ui-keymap.h ui-knowledge.h ui-map.h \
- ui-menu.h ui-output.h ui-object.h ui-player.h ui-prefs.h ui-spell.h \
- score.h ui-score.h ui-signals.h ui-spoil.h ui-store.h ui-target.h \
- ui-wizard.h
+ list-mon-temp-flags.h list-mon-race-flags.h list-mon-spells.h obj-gear.h \
+ list-equip-slots.h obj-util.h player-attack.h player-calcs.h \
+ player-timed.h list-player-timed.h player-util.h store.h ui-command.h \
+ ui-term.h ui-event.h ui-display.h ui-help.h ui-input.h ui-keymap.h \
+ ui-map.h ui-menu.h ui-output.h z-textblock.h ui-options.h obj-ignore.h \
+ list-ignore-types.h ui-player.h ui-prefs.h ui-target.h
