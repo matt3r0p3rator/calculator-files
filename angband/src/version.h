@@ -1,5 +1,5 @@
 #ifndef VERSION_H
 #define VERSION_H
-/*"-g07653dd-dirty"*/
-#define VERSION_STRING "-g07653dd-dirty"
+/*"-g588e957-dirty"*/
+#define VERSION_STRING "-g588e957-dirty"
 #endif

@@ -205,6 +205,14 @@ struct cmd_info cmd_util[] =
 };
 
 /**
+ * Open the targeting cursor and pathfind to the chosen grid (Enter to confirm).
+ */
+static void do_cmd_goto_waypoint(void)
+{
+	target_set_interactive(TARGET_LOOK, player->grid.x, player->grid.y, true);
+}
+
+/**
  * Commands that shouldn't be shown to the user
  */
 struct cmd_info cmd_hidden[] =
@@ -218,6 +226,7 @@ struct cmd_info cmd_hidden[] =
 	{ "Walk", { ';' }, CMD_WALK, NULL, NULL, 0, NULL, NULL, NULL, 0 },
 	{ "Start running", { '.', ',' }, CMD_RUN, NULL, NULL, 0, NULL, NULL, NULL, 0 },
 	{ "Start exploring", { 'p' }, CMD_EXPLORE, NULL, NULL, 0, NULL, NULL, NULL, 0 },
+	{ "Go to location", { 'P' }, CMD_NULL, do_cmd_goto_waypoint, NULL, 0, NULL, NULL, NULL, 0 },
 	{ "Stand still", { ',', '.' }, CMD_HOLD, NULL, NULL, 0, NULL, NULL, NULL, 0 },
 	{ "Center map", { KTRL('L'), '@' }, CMD_NULL, do_cmd_center_map, NULL, 0, NULL, NULL, NULL, 0 },
 	{ "Toggle wizard mode", { KTRL('W') }, CMD_NULL, do_cmd_wizard, NULL, 0, NULL, NULL, NULL, 0 },

@@ -1070,7 +1070,7 @@ void textui_target_closest(void)
  * which requires changes elsewhere
  */
 static int draw_path(uint16_t path_n, struct loc *path_g, wchar_t *c, int *a,
-					 int y1, int x1)
+					 int y1, int x1, bool use_bg_path)
 {
 	int i;
 	bool on_screen;
@@ -1161,7 +1161,12 @@ static int draw_path(uint16_t path_n, struct loc *path_g, wchar_t *c, int *a,
 			colour = COLOUR_WHITE;
 
 		/* Draw the path segment */
-		(void)Term_addch(colour, L'*');
+		if (use_bg_path) {
+			/* Preserve the map character, apply blue background */
+			(void)Term_addch((a[i] % MULT_BG) + (MULT_BG * BG_PATH), c[i]);
+		} else {
+			(void)Term_addch(colour, L'*');
+		}
 	}
 	return i;
 }
@@ -1279,6 +1284,13 @@ bool target_set_interactive(int mode, int x, int y, bool allow_pathfinding)
 	wchar_t *path_char = mem_zalloc(z_info->max_range * sizeof(wchar_t));
 	int *path_attr = mem_zalloc(z_info->max_range * sizeof(int));
 
+	/* These are used for the A* waypoint path highlight */
+	struct loc *wp_steps = NULL;
+	wchar_t *wp_char = NULL;
+	int *wp_attr = NULL;
+	int wp_n = 0;
+	bool wp_drawn = false;
+
 	/* If we haven't been given an initial location, start on the
 	   player, otherwise  honour it by going into "free targetting" mode. */
 	if (x == -1 || y == -1 || !square_in_bounds_fully(cave, loc(x, y))) {
@@ -1308,6 +1320,16 @@ bool target_set_interactive(int mode, int x, int y, bool allow_pathfinding)
 	/* Interact */
 	while (!done) {
 		bool path_drawn = false;
+
+		/* Restore previous A* waypoint path before redrawing */
+		if (wp_drawn) {
+			load_path((uint16_t)wp_n, wp_steps, wp_char, wp_attr);
+			wp_drawn = false;
+		}
+		mem_free(wp_steps); wp_steps = NULL;
+		mem_free(wp_char);  wp_char  = NULL;
+		mem_free(wp_attr);  wp_attr  = NULL;
+
 		bool use_interesting_mode = show_interesting && point_set_size(targets);
 		bool use_free_mode = !use_interesting_mode;
 
@@ -1335,10 +1357,30 @@ bool target_set_interactive(int mode, int x, int y, bool allow_pathfinding)
 			loc(player->grid.x, player->grid.y), loc(x, y),
 			PROJECT_THRU | PROJECT_INFO);
 
-		/* Draw the path in "target" mode. If there is one */
+		/* Draw the path in "target" mode only. */
 		if (mode & (TARGET_KILL))
 			path_drawn = draw_path(path_n, path_g, path_char, path_attr,
-					player->grid.y, player->grid.x);
+					player->grid.y, player->grid.x, false);
+
+		/* Draw A* waypoint path with blue background. */
+		if (allow_pathfinding) {
+			int16_t *wp_dirs = NULL;
+			wp_n = find_path(player, player->grid, loc(x, y), &wp_dirs);
+			if (wp_n > 0 && wp_dirs) {
+				/* Convert direction steps (reverse order) to locs (forward) */
+				wp_steps = mem_alloc(wp_n * sizeof(struct loc));
+				struct loc g = player->grid;
+				for (int j = 0; j < wp_n; j++) {
+					g = loc_sum(g, ddgrid[wp_dirs[wp_n - 1 - j]]);
+					wp_steps[j] = g;
+				}
+				mem_free(wp_dirs);
+				wp_char = mem_zalloc(wp_n * sizeof(wchar_t));
+				wp_attr = mem_zalloc(wp_n * sizeof(int));
+				wp_drawn = draw_path((uint16_t)wp_n, wp_steps, wp_char,
+						wp_attr, player->grid.y, player->grid.x, true);
+			}
+		}
 
 		/* Describe and Prompt */
 		ui_event press = target_set_interactive_aux(y, x,
@@ -1485,7 +1527,8 @@ bool target_set_interactive(int mode, int x, int y, bool allow_pathfinding)
 				done = true;
 			}
 
-		} else if (allow_pathfinding && event_is_key(press, 'g')) {
+		} else if (allow_pathfinding && (event_is_key(press, 'g')
+				|| event_is_key(press, KC_ENTER))) {
 			/* Navigate to a location and done */
 			cmdq_push(CMD_PATHFIND);
 			cmd_set_arg_point(cmdq_peek(), "point", loc(x, y));
@@ -1650,6 +1693,13 @@ bool target_set_interactive(int mode, int x, int y, bool allow_pathfinding)
 	verify_panel();
 
 	handle_stuff(player);
+
+	/* Restore and free A* waypoint path */
+	if (wp_drawn)
+		load_path((uint16_t)wp_n, wp_steps, wp_char, wp_attr);
+	mem_free(wp_steps);
+	mem_free(wp_char);
+	mem_free(wp_attr);
 
 	mem_free(path_attr);
 	mem_free(path_char);
