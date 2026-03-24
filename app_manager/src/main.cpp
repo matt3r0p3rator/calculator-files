@@ -21,7 +21,7 @@ int main(void) {
     apps.push_back(&chemistry);
     apps.push_back(&gauss);
     apps.push_back(&inverse);
-
+    
     int selected_app = 0;
     bool running = true;
 
