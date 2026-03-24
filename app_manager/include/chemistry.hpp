@@ -41,6 +41,12 @@ struct PeriodicTrend {
     std::string why;
 };
 
+struct PolyatomicIon {
+    std::string name;
+    std::string formula;
+    int charge;
+};
+
 class ChemistryApp : public App {
 public:
     std::string getName() const override { return "Chemistry Explorer"; }
@@ -48,6 +54,7 @@ public:
 private:
     std::vector<Element> elements;
     std::vector<PeriodicTrend> trends;
+    std::vector<PolyatomicIon> polyatomics;
     void loadData();
     void showElementDetails(const Element& element, TIGui& gui);
     void showTrendDetails(const PeriodicTrend& trend, TIGui& gui);

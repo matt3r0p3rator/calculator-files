@@ -17,12 +17,10 @@ int main(void) {
     GaussApp gauss;
     ChemistryApp chemistry;
     InverseApp inverse;
-    //ScratchpadApp scratchpad;
     
-    apps.push_back(&gauss);
     apps.push_back(&chemistry);
+    apps.push_back(&gauss);
     apps.push_back(&inverse);
-    //apps.push_back(&scratchpad);
 
     int selected_app = 0;
     bool running = true;

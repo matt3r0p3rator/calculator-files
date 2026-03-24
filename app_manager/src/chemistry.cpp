@@ -3,17 +3,20 @@
 #include "../include/chemistry.hpp"
 #include "../include/chemistry_data.hpp"
 #include "../include/trend_data.hpp"
+#include "../include/polyatomic_data.hpp"
 #include <vector>
 #include <string>
 #include <cstdio>
 #include <cmath>
+#include <cctype>
 #include <algorithm>
 
 using namespace std;
 
 enum AppStateP0 {
     PEROIODIC_TABLE,
-    TREND_EXPLORER
+    TREND_EXPLORER,
+    POLYATOMIC_LIST
 };
 
 enum AppStateP1 {
@@ -35,6 +38,7 @@ enum ColorMode {
 void ChemistryApp::loadData() {
     elements = PERIODIC_TABLE_DATA;
     trends = TREND_DATA;
+    polyatomics = POLYATOMIC_DATA;
 }
 
 TIGuiColor getCategoryColor(const string& category) {
@@ -156,6 +160,12 @@ void ChemistryApp::run(TIGui& gui) {
     int detail_trend_menu_idx = 0; // 0=heatmap, 1=scatterplot
     int scatter_x_trend_idx = 0;
     int scatter_cursor_idx = 0;
+
+    // Polyatomics tab state
+    string poly_search;
+    int poly_scroll_offset = 0;
+    int poly_selected_idx = 0;
+    int poly_name_scroll = 0;
     
     // Create spatial grid for better navigation
     int element_grid[9][18];
@@ -287,7 +297,7 @@ void ChemistryApp::run(TIGui& gui) {
                 gui.drawBottomBar(" ^/v: Scroll | ESC/TAB: Back to Table");
             }
         } else if (state0 == TREND_EXPLORER) {
-            gui.drawTopBar("Periodic Trends        Tab: Periodic Table");
+            gui.drawTopBar("Periodic Trends        Tab: Polyatomics");
             if (state1 == TREND_LIST) {
                 gui.drawText(20, 30, "Select a property:", COLOR_DARK_GRAY);
                 for (size_t i = 0; i < trends.size(); i++) {
@@ -478,6 +488,93 @@ void ChemistryApp::run(TIGui& gui) {
                 
                 gui.drawBottomBar(" <-/->: Scroll Pt | ESC: Back");
             }
+        } else if (state0 == POLYATOMIC_LIST) {
+            gui.drawTopBar("Polyatomic Ions      Tab: Periodic Table");
+
+            // Build filtered list (case-insensitive name contains query)
+            vector<int> filtered;
+            string query_lower = poly_search;
+            for (char& c : query_lower) c = tolower(c);
+            for (int i = 0; i < (int)polyatomics.size(); i++) {
+                string name_lower = polyatomics[i].name;
+                for (char& c : name_lower) c = tolower(c);
+                string formula_lower = polyatomics[i].formula;
+                for (char& c : formula_lower) c = tolower(c);
+                if (query_lower.empty() ||
+                    name_lower.find(query_lower) != string::npos ||
+                    formula_lower.find(query_lower) != string::npos) {
+                    filtered.push_back(i);
+                }
+            }
+
+            // Clamp selection to filtered list size
+            if (!filtered.empty() && poly_selected_idx >= (int)filtered.size())
+                poly_selected_idx = (int)filtered.size() - 1;
+            if (poly_selected_idx < 0) poly_selected_idx = 0;
+
+            // Keep selected item scrolled into view
+            const int POLY_VISIBLE = 8;
+            if (poly_selected_idx < poly_scroll_offset)
+                poly_scroll_offset = poly_selected_idx;
+            if (poly_selected_idx >= poly_scroll_offset + POLY_VISIBLE)
+                poly_scroll_offset = poly_selected_idx - POLY_VISIBLE + 1;
+            if (poly_scroll_offset < 0) poly_scroll_offset = 0;
+
+            // Search bar
+            gui.fillRect(5, 23, 310, 14, COLOR_LIGHT_GRAY);
+            gui.drawRect(5, 23, 310, 14, COLOR_DARK_GRAY);
+            gui.drawText(8, 25, "Search: " + poly_search + "_", COLOR_BLACK);
+
+            // Column headers
+            gui.drawText(10, 39, "Name", COLOR_DARK_GRAY);
+            gui.drawText(195, 39, "Formula", COLOR_DARK_GRAY);
+            gui.drawText(278, 39, "Chg", COLOR_DARK_GRAY);
+
+            // List items
+            for (int i = 0; i < POLY_VISIBLE; i++) {
+                int fi = poly_scroll_offset + i;
+                if (fi >= (int)filtered.size()) break;
+                int pi = filtered[fi];
+                int y = 49 + i * 20;
+
+                string charge_str;
+                if (polyatomics[pi].charge > 0) charge_str = "+" + to_string(polyatomics[pi].charge);
+                else charge_str = to_string(polyatomics[pi].charge);
+
+                const string& full_name = polyatomics[pi].name;
+                string disp_name;
+                if (fi == poly_selected_idx) {
+                    // Apply horizontal scroll to selected row
+                    int ns = poly_name_scroll;
+                    if (ns >= (int)full_name.size()) ns = (int)full_name.size() - 1;
+                    if (ns < 0) ns = 0;
+                    string scrolled = full_name.substr(ns);
+                    bool has_left  = ns > 0;
+                    bool has_right = scrolled.size() > 24;
+                    if (has_right) scrolled = scrolled.substr(0, 23) + ">";
+                    if (has_left)  scrolled[0] = '<';
+                    disp_name = scrolled;
+                } else {
+                    disp_name = full_name;
+                    if (disp_name.size() > 24) disp_name = disp_name.substr(0, 23) + ">";
+                }
+
+                if (fi == poly_selected_idx) {
+                    gui.fillRect(5, y - 1, 310, 18, COLOR_BLUE);
+                    gui.drawText(10, y + 1, disp_name, COLOR_WHITE);
+                    gui.drawText(195, y + 1, polyatomics[pi].formula, COLOR_WHITE);
+                    gui.drawText(278, y + 1, charge_str, COLOR_WHITE);
+                } else {
+                    gui.drawText(10, y + 1, disp_name, COLOR_BLACK);
+                    gui.drawText(195, y + 1, polyatomics[pi].formula, COLOR_DARK_GRAY);
+                    gui.drawText(278, y + 1, charge_str, COLOR_DARK_GRAY);
+                }
+            }
+
+            // Result count
+            gui.drawText(5, 214, to_string(filtered.size()) + "/" + to_string(polyatomics.size()) + " ions", COLOR_DARK_GRAY);
+
+            gui.drawBottomBar("A-Z: Search | BKSP: Clear | DPad: Scroll | TAB: Switch");
         }
         gui.render();
         SDL_Event event;
@@ -493,7 +590,9 @@ void ChemistryApp::run(TIGui& gui) {
                 
                 int sym = event.key.keysym.sym;
                 if (sym == SDLK_ESCAPE) {
-                    if (state0 == PEROIODIC_TABLE && state1 == ELEMENT_DETAIL) {
+                    if (state0 == POLYATOMIC_LIST) {
+                        running = false;
+                    } else if (state0 == PEROIODIC_TABLE && state1 == ELEMENT_DETAIL) {
                         state1 = ELEMENT_LIST;
                     } else if (state0 == PEROIODIC_TABLE && state1 == COLOR_OPTION_MENU) {
                         state1 = ELEMENT_LIST;
@@ -522,6 +621,14 @@ void ChemistryApp::run(TIGui& gui) {
                         state1 = TREND_DETAIL;
                     } else if (state0 == TREND_EXPLORER && state1 == TREND_DETAIL) {
                         state1 = TREND_LIST;
+                    } else if (state0 == TREND_EXPLORER) { // TREND_LIST
+                        state0 = POLYATOMIC_LIST;
+                        poly_search = "";
+                        poly_scroll_offset = 0;
+                        poly_selected_idx = 0;
+                    } else if (state0 == POLYATOMIC_LIST) {
+                        state0 = PEROIODIC_TABLE;
+                        state1 = ELEMENT_LIST;
                     } else {
                         state0 = PEROIODIC_TABLE;
                         state1 = ELEMENT_LIST;
@@ -552,7 +659,9 @@ void ChemistryApp::run(TIGui& gui) {
                         state1 = TREND_SCATTER;
                     }
                 } else if (sym == SDLK_LEFT || sym == SDLK_KP4) {
-                    if (state0 == PEROIODIC_TABLE && state1 == ELEMENT_LIST) {
+                    if (state0 == POLYATOMIC_LIST) {
+                        if (poly_name_scroll > 0) poly_name_scroll--;
+                    } else if (state0 == PEROIODIC_TABLE && state1 == ELEMENT_LIST) {
                         int c = -1, r = -1;
                         for(int rr=0; rr<9; rr++) for(int cc=0; cc<18; cc++) if(element_grid[rr][cc]==selected_element_idx){c=cc; r=rr; break;}
                         if (c >= 0) {
@@ -576,7 +685,9 @@ void ChemistryApp::run(TIGui& gui) {
                         if (scatter_cursor_idx > 0) scatter_cursor_idx--;
                     }
                 } else if (sym == SDLK_RIGHT || sym == SDLK_KP6) {
-                    if (state0 == PEROIODIC_TABLE && state1 == ELEMENT_LIST) {
+                    if (state0 == POLYATOMIC_LIST) {
+                        poly_name_scroll++; // clamped in render
+                    } else if (state0 == PEROIODIC_TABLE && state1 == ELEMENT_LIST) {
                         int c = -1, r = -1;
                         for(int rr=0; rr<9; rr++) for(int cc=0; cc<18; cc++) if(element_grid[rr][cc]==selected_element_idx){c=cc; r=rr; break;}
                         if (c >= 0) {
@@ -600,7 +711,9 @@ void ChemistryApp::run(TIGui& gui) {
                         scatter_cursor_idx++;
                     }
                 } else if (sym == SDLK_UP || sym == SDLK_KP8) {
-                    if (state0 == PEROIODIC_TABLE && state1 == ELEMENT_LIST) {
+                    if (state0 == POLYATOMIC_LIST) {
+                        if (poly_selected_idx > 0) { poly_selected_idx--; poly_name_scroll = 0; }
+                    } else if (state0 == PEROIODIC_TABLE && state1 == ELEMENT_LIST) {
                         int c = -1, r = -1;
                         for(int rr=0; rr<9; rr++) for(int cc=0; cc<18; cc++) if(element_grid[rr][cc]==selected_element_idx){c=cc; r=rr; break;}
                         if (c >= 0) {
@@ -628,7 +741,9 @@ void ChemistryApp::run(TIGui& gui) {
                         if (scatter_x_trend_idx > 0) scatter_x_trend_idx--;
                     }
                 } else if (sym == SDLK_DOWN || sym == SDLK_KP2) {
-                    if (state0 == PEROIODIC_TABLE && state1 == ELEMENT_LIST) {
+                    if (state0 == POLYATOMIC_LIST) {
+                        poly_selected_idx++; poly_name_scroll = 0; // clamped in render
+                    } else if (state0 == PEROIODIC_TABLE && state1 == ELEMENT_LIST) {
                         int c = -1, r = -1;
                         for(int rr=0; rr<9; rr++) for(int cc=0; cc<18; cc++) if(element_grid[rr][cc]==selected_element_idx){c=cc; r=rr; break;}
                         if (c >= 0) {
@@ -663,6 +778,32 @@ void ChemistryApp::run(TIGui& gui) {
                 } else if (sym == SDLK_MINUS || sym == SDLK_KP_MINUS) {
                     if (state0 == TREND_EXPLORER && state1 == TREND_DETAIL) {
                         if (detail_scroll_offset > 0) detail_scroll_offset--;
+                    }
+                } else if (state0 == POLYATOMIC_LIST) {
+                    if (sym >= SDLK_a && sym <= SDLK_z) {
+                        if (poly_search.size() < 20) {
+                            poly_search += (char)('a' + (sym - SDLK_a));
+                            poly_scroll_offset = 0;
+                            poly_selected_idx = 0;
+                        }
+                    } else if (sym >= SDLK_0 && sym <= SDLK_9) {
+                        if (poly_search.size() < 20) {
+                            poly_search += (char)('0' + (sym - SDLK_0));
+                            poly_scroll_offset = 0;
+                            poly_selected_idx = 0;
+                        }
+                    } else if (sym >= SDLK_KP0 && sym <= SDLK_KP9) {
+                        if (poly_search.size() < 20) {
+                            poly_search += (char)('0' + (sym - SDLK_KP0));
+                            poly_scroll_offset = 0;
+                            poly_selected_idx = 0;
+                        }
+                    } else if (sym == SDLK_BACKSPACE || sym == SDLK_DELETE) {
+                        if (!poly_search.empty()) {
+                            poly_search.pop_back();
+                            poly_scroll_offset = 0;
+                            poly_selected_idx = 0;
+                        }
                     }
                 }
             }
