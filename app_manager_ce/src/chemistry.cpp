@@ -149,25 +149,34 @@ void ChemistryApp::run(TIGui& gui) {
     int  poly_selected_idx  = 0;
     int  poly_name_scroll   = 0;
 
-    // Build spatial grid for arrow-key navigation on the periodic table
-    int element_grid[9][18];
-    for (int r = 0; r < 9; r++)
-        for (int c = 0; c < 18; c++)
-            element_grid[r][c] = -1;
-
-    for (int i = 0; i < NUM_ELEMENTS; i++) {
-        const Element& e = PERIODIC_TABLE_DATA[i];
-        int col = -1, row = -1;
-        if (e.atomic_number >= 57 && e.atomic_number <= 71) {
-            row = 7; col = (e.atomic_number - 57) + 2;
-        } else if (e.atomic_number >= 89 && e.atomic_number <= 103) {
-            row = 8; col = (e.atomic_number - 89) + 2;
-        } else {
-            col = (e.group[0] == '\0')  ? -1 : atoi(e.group)  - 1;
-            row = (e.period[0] == '\0') ? -1 : atoi(e.period) - 1;
+    // Build spatial grid + O(1) reverse lookup (built once, static)
+    static int  element_grid[9][18];
+    static int8_t elem_r[118];  // element index -> grid row (-1 = not placed)
+    static int8_t elem_c[118];  // element index -> grid col
+    static bool grid_built = false;
+    if (!grid_built) {
+        for (int r = 0; r < 9; r++)
+            for (int c = 0; c < 18; c++)
+                element_grid[r][c] = -1;
+        for (int i = 0; i < 118; i++) { elem_r[i] = -1; elem_c[i] = -1; }
+        for (int i = 0; i < NUM_ELEMENTS; i++) {
+            const Element& e = PERIODIC_TABLE_DATA[i];
+            int col = -1, row = -1;
+            if (e.atomic_number >= 57 && e.atomic_number <= 71) {
+                row = 7; col = (e.atomic_number - 57) + 2;
+            } else if (e.atomic_number >= 89 && e.atomic_number <= 103) {
+                row = 8; col = (e.atomic_number - 89) + 2;
+            } else {
+                col = (e.group[0] == '\0')  ? -1 : atoi(e.group)  - 1;
+                row = (e.period[0] == '\0') ? -1 : atoi(e.period) - 1;
+            }
+            if (col >= 0 && col < 18 && row >= 0 && row < 9) {
+                element_grid[row][col] = i;
+                elem_r[i] = (int8_t)row;
+                elem_c[i] = (int8_t)col;
+            }
         }
-        if (col >= 0 && col < 18 && row >= 0 && row < 9)
-            element_grid[row][col] = i;
+        grid_built = true;
     }
 
     bool running = true;
@@ -183,19 +192,14 @@ void ChemistryApp::run(TIGui& gui) {
             if (state1 == ELEMENT_LIST) {
                 const int start_x = 5, start_y = 25;
                 const int cell_w  = 17, cell_h  = 17;
+                static char info[80], cfg[80];
 
-                for (int i = 0; i < NUM_ELEMENTS; i++) {
-                    const Element& e = PERIODIC_TABLE_DATA[i];
-                    int col = -1, row = -1;
-                    if (e.atomic_number >= 57 && e.atomic_number <= 71) {
-                        row = 7; col = (e.atomic_number - 57) + 2;
-                    } else if (e.atomic_number >= 89 && e.atomic_number <= 103) {
-                        row = 8; col = (e.atomic_number - 89) + 2;
-                    } else {
-                        col = (e.group[0] == '\0')  ? -1 : atoi(e.group)  - 1;
-                        row = (e.period[0] == '\0') ? -1 : atoi(e.period) - 1;
-                    }
-                    if (col >= 0 && row >= 0) {
+                // Iterate grid directly — no atoi() per element per frame
+                for (int row = 0; row < 9; row++) {
+                    for (int col = 0; col < 18; col++) {
+                        int i = element_grid[row][col];
+                        if (i < 0) continue;
+                        const Element& e = PERIODIC_TABLE_DATA[i];
                         int x = start_x + col * cell_w;
                         int y = start_y + row * cell_h;
                         TIGuiColor cat_color = COLOR_LIGHT_GRAY;
@@ -204,16 +208,13 @@ void ChemistryApp::run(TIGui& gui) {
                         else if (current_color_mode == MODE_BLOCK)
                             cat_color = getBlockColor(e.block);
 
-                        if (i == selected_element_idx &&
-                            state1 != COLOR_OPTION_MENU) {
+                        if (i == selected_element_idx) {
                             gui.fillRect(x, y, cell_w, cell_h, COLOR_BLACK);
                             gui.drawText(x + 2, y + 2, e.symbol, COLOR_WHITE);
-                            char info[80];
-                            snprintf(info, sizeof(info), "Z=%d %s (%s)",
+                            snprintf(info, 80, "Z=%d %s (%s)",
                                      e.atomic_number, e.name, e.category);
                             gui.drawText(10, 203, info, COLOR_BLACK);
-                            char cfg[80];
-                            snprintf(cfg, sizeof(cfg), "Wt:%.4g | %s",
+                            snprintf(cfg, 80, "Wt:%.4g | %s",
                                      e.atomic_weight, e.electron_configuration);
                             gui.drawText(10, 215, cfg, COLOR_DARK_GRAY);
                         } else {
@@ -245,7 +246,7 @@ void ChemistryApp::run(TIGui& gui) {
             } else if (state1 == ELEMENT_DETAIL) {
                 const Element& e = PERIODIC_TABLE_DATA[selected_element_idx];
 
-                char det[19][80];
+                static char det[19][80];
                 int  n_det = 0;
                 snprintf(det[n_det++], 80, "No: %d | Symbol: %s",
                          e.atomic_number, e.symbol);
@@ -318,20 +319,20 @@ void ChemistryApp::run(TIGui& gui) {
                 snprintf(title_buf, sizeof(title_buf), "Trend: %s", t.name);
                 gui.drawText(20, 30, title_buf, COLOR_DARK_GRAY);
 
-                char all_lines[40][80];
+                static char all_lines[40][80];
                 int  n_all = 0;
 
-                char beh_prefix[60];
+                static char beh_prefix[60];
                 snprintf(beh_prefix, sizeof(beh_prefix), "Behavior: %s", t.behavior);
                 n_all += wrapText(beh_prefix, 45, all_lines + n_all, 40 - n_all);
                 if (n_all < 40) all_lines[n_all++][0] = '\0';
 
-                char desc_prefix[300];
+                static char desc_prefix[180];
                 snprintf(desc_prefix, sizeof(desc_prefix), "Desc: %s", t.description);
                 n_all += wrapText(desc_prefix, 45, all_lines + n_all, 40 - n_all);
                 if (n_all < 40) all_lines[n_all++][0] = '\0';
 
-                char why_prefix[300];
+                static char why_prefix[180];
                 snprintf(why_prefix, sizeof(why_prefix), "Why: %s", t.why);
                 n_all += wrapText(why_prefix, 45, all_lines + n_all, 40 - n_all);
 
@@ -518,10 +519,10 @@ void ChemistryApp::run(TIGui& gui) {
             gui.drawTopBar("Polyatomic Ions      2nd: Periodic Table");
 
             // Build filtered list
-            int filtered[44];
+            static int filtered[44];
             int n_filtered = 0;
             // Lower-case query copy
-            char query_lower[21];
+            static char query_lower[21];
             strncpy(query_lower, poly_search, 20);
             query_lower[20] = '\0';
             for (int k = 0; query_lower[k]; k++)
@@ -529,7 +530,7 @@ void ChemistryApp::run(TIGui& gui) {
 
             for (int i = 0; i < NUM_POLYATOMICS && n_filtered < 44; i++) {
                 // lower-case copies of name and formula
-                char nl[80], fl[40];
+                static char nl[80], fl[40];
                 int len;
                 len = (int)strlen(POLYATOMIC_DATA[i].name);
                 if (len > 79) len = 79;
@@ -562,13 +563,9 @@ void ChemistryApp::run(TIGui& gui) {
             // Search bar
             gui.fillRect(5, 23, 310, 14, COLOR_LIGHT_GRAY);
             gui.drawRect(5, 23, 310, 14, COLOR_DARK_GRAY);
-            char search_prompt[50];
-            if (gui.isAlphaMode())
-                snprintf(search_prompt, sizeof(search_prompt),
-                         "Search[ALPHA]: %s_", poly_search);
-            else
-                snprintf(search_prompt, sizeof(search_prompt),
-                         "Search: %s_", poly_search);
+            static char search_prompt[50];
+            snprintf(search_prompt, sizeof(search_prompt),
+                     "Search (hold Alpha+key): %s_", poly_search);
             gui.drawText(8, 25, search_prompt, COLOR_BLACK);
 
             gui.drawText(10,  39, "Name",    COLOR_DARK_GRAY);
@@ -712,9 +709,7 @@ void ChemistryApp::run(TIGui& gui) {
             if (state0 == POLYATOMIC_LIST) {
                 if (poly_name_scroll > 0) poly_name_scroll--;
             } else if (state0 == PEROIODIC_TABLE && state1 == ELEMENT_LIST) {
-                int c = -1, r = -1;
-                for (int rr = 0; rr < 9; rr++) for (int cc = 0; cc < 18; cc++)
-                    if (element_grid[rr][cc] == selected_element_idx) { c=cc; r=rr; break; }
+                int c = elem_c[selected_element_idx], r = elem_r[selected_element_idx];
                 if (c >= 0) {
                     int nc = c - 1;
                     while (nc >= 0 && element_grid[r][nc] == -1) nc--;
@@ -724,9 +719,7 @@ void ChemistryApp::run(TIGui& gui) {
             } else if (state0 == TREND_EXPLORER && state1 == TREND_DETAIL) {
                 if (detail_scroll_offset > 0) detail_scroll_offset--;
             } else if (state0 == TREND_EXPLORER && state1 == TREND_HEATMAP) {
-                int c = -1, r = -1;
-                for (int rr = 0; rr < 9; rr++) for (int cc = 0; cc < 18; cc++)
-                    if (element_grid[rr][cc] == selected_element_idx) { c=cc; r=rr; break; }
+                int c = elem_c[selected_element_idx], r = elem_r[selected_element_idx];
                 if (c >= 0) {
                     int nc = c - 1;
                     while (nc >= 0 && element_grid[r][nc] == -1) nc--;
@@ -742,9 +735,7 @@ void ChemistryApp::run(TIGui& gui) {
             if (state0 == POLYATOMIC_LIST) {
                 poly_name_scroll++;
             } else if (state0 == PEROIODIC_TABLE && state1 == ELEMENT_LIST) {
-                int c = -1, r = -1;
-                for (int rr = 0; rr < 9; rr++) for (int cc = 0; cc < 18; cc++)
-                    if (element_grid[rr][cc] == selected_element_idx) { c=cc; r=rr; break; }
+                int c = elem_c[selected_element_idx], r = elem_r[selected_element_idx];
                 if (c >= 0) {
                     int nc = c + 1;
                     while (nc < 18 && element_grid[r][nc] == -1) nc++;
@@ -755,9 +746,7 @@ void ChemistryApp::run(TIGui& gui) {
             } else if (state0 == TREND_EXPLORER && state1 == TREND_DETAIL) {
                 if (detail_scroll_offset < trend_detail_max_scroll) detail_scroll_offset++;
             } else if (state0 == TREND_EXPLORER && state1 == TREND_HEATMAP) {
-                int c = -1, r = -1;
-                for (int rr = 0; rr < 9; rr++) for (int cc = 0; cc < 18; cc++)
-                    if (element_grid[rr][cc] == selected_element_idx) { c=cc; r=rr; break; }
+                int c = elem_c[selected_element_idx], r = elem_r[selected_element_idx];
                 if (c >= 0) {
                     int nc = c + 1;
                     while (nc < 18 && element_grid[r][nc] == -1) nc++;
@@ -774,9 +763,7 @@ void ChemistryApp::run(TIGui& gui) {
             if (state0 == POLYATOMIC_LIST) {
                 if (poly_selected_idx > 0) { poly_selected_idx--; poly_name_scroll = 0; }
             } else if (state0 == PEROIODIC_TABLE && state1 == ELEMENT_LIST) {
-                int c = -1, r = -1;
-                for (int rr = 0; rr < 9; rr++) for (int cc = 0; cc < 18; cc++)
-                    if (element_grid[rr][cc] == selected_element_idx) { c=cc; r=rr; break; }
+                int c = elem_c[selected_element_idx], r = elem_r[selected_element_idx];
                 if (c >= 0) {
                     int nr = r - 1;
                     while (nr >= 0 && element_grid[nr][c] == -1) nr--;
@@ -791,9 +778,7 @@ void ChemistryApp::run(TIGui& gui) {
             } else if (state0 == TREND_EXPLORER && state1 == TREND_DETAIL) {
                 if (detail_trend_menu_idx > 0) detail_trend_menu_idx--;
             } else if (state0 == TREND_EXPLORER && state1 == TREND_HEATMAP) {
-                int c = -1, r = -1;
-                for (int rr = 0; rr < 9; rr++) for (int cc = 0; cc < 18; cc++)
-                    if (element_grid[rr][cc] == selected_element_idx) { c=cc; r=rr; break; }
+                int c = elem_c[selected_element_idx], r = elem_r[selected_element_idx];
                 if (c >= 0) {
                     int nr = r - 1;
                     while (nr >= 0 && element_grid[nr][c] == -1) nr--;
@@ -808,9 +793,7 @@ void ChemistryApp::run(TIGui& gui) {
             if (state0 == POLYATOMIC_LIST) {
                 poly_selected_idx++; poly_name_scroll = 0;
             } else if (state0 == PEROIODIC_TABLE && state1 == ELEMENT_LIST) {
-                int c = -1, r = -1;
-                for (int rr = 0; rr < 9; rr++) for (int cc = 0; cc < 18; cc++)
-                    if (element_grid[rr][cc] == selected_element_idx) { c=cc; r=rr; break; }
+                int c = elem_c[selected_element_idx], r = elem_r[selected_element_idx];
                 if (c >= 0) {
                     int nr = r + 1;
                     while (nr < 9 && element_grid[nr][c] == -1) nr++;
@@ -825,9 +808,7 @@ void ChemistryApp::run(TIGui& gui) {
             } else if (state0 == TREND_EXPLORER && state1 == TREND_DETAIL) {
                 if (detail_trend_menu_idx < 1) detail_trend_menu_idx++;
             } else if (state0 == TREND_EXPLORER && state1 == TREND_HEATMAP) {
-                int c = -1, r = -1;
-                for (int rr = 0; rr < 9; rr++) for (int cc = 0; cc < 18; cc++)
-                    if (element_grid[rr][cc] == selected_element_idx) { c=cc; r=rr; break; }
+                int c = elem_c[selected_element_idx], r = elem_r[selected_element_idx];
                 if (c >= 0) {
                     int nr = r + 1;
                     while (nr < 9 && element_grid[nr][c] == -1) nr++;

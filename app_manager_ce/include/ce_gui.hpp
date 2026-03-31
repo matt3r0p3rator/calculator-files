@@ -12,7 +12,7 @@
 // Input:   kb_Scan() edge-detection loop replaces SDL_WaitEvent.
 //          2nd key  = Tab  |  Mode key   = Menu  |  Clear     = ESC/Back
 //          (-)  key = '-'  |  Del  key   = Backspace           (in text input)
-//          Alpha  key  toggles alpha-lock for A–Z letter entry
+//          Hold Alpha + key to type letters (A-Z follow physical key order)
 //
 // NOTE on alpha-mode letter mapping:
 //   The mapping below matches the letters PRINTED ABOVE each key face on the
@@ -73,7 +73,7 @@ class TIGui {
 
     // (Palette data initialised in the constructor body — see below)
 
-    bool alpha_locked = false;   // toggled by pressing the Alpha key
+    bool alpha_locked = false;   // toggled by 2nd + Alpha; hold Alpha key acts as a modifier
 
     // ── Helper: is any key currently held? ───────────────────────────────────
     static bool anyKeyHeld() {
@@ -99,65 +99,60 @@ class TIGui {
         if (kb_Data[1] & kb_2nd)   return KEY_TAB;    // 2nd = Tab
         if (kb_Data[1] & kb_Mode)  return KEY_MENU;
 
-        // ── Alpha key toggles alpha-lock (consumed, not forwarded) ──────
+        // ── Alpha: hold as a modifier key to type letters ──────────────────
+        // Holding Alpha while pressing any letter key returns that letter.
+        // Alpha alone (without a letter key) does nothing — no toggle bug.
         if (kb_Data[2] & kb_Alpha) {
-            alpha_locked = !alpha_locked;
-            return KEY_NONE;
+            // CORRECT TI-84 CE alpha layout (green letters above each key).
+            // Reading left-to-right, top-to-bottom across the main keypad:
+            //   [MATH]=A  [APPS]=B  [PRGM]=C  [VARS]=D
+            //   [x^-1]=E  [SIN] =F  [COS] =G  [TAN] =H  [^]=I
+            //   [x^2] =J  [,]   =K  [(]   =L  [)]   =M  [÷]=N
+            //   [LOG] =O  [7]   =P  [8]   =Q  [9]   =R  [×]=S
+            //   [LN]  =T  [4]   =U  [5]   =V  [6]   =W  [-]=X
+            //   [STO] =Y  [1]   =Z
+            if (kb_Data[2] & kb_Math)   return KEY_A;  // [MATH]
+            if (kb_Data[3] & kb_Apps)   return KEY_B;  // [APPS]
+            if (kb_Data[4] & kb_Prgm)   return KEY_C;  // [PRGM]
+            if (kb_Data[5] & kb_Vars)   return KEY_D;  // [VARS]
+            if (kb_Data[2] & kb_Recip)  return KEY_E;  // [x^-1]
+            if (kb_Data[3] & kb_Sin)    return KEY_F;  // [SIN]
+            if (kb_Data[4] & kb_Cos)    return KEY_G;  // [COS]
+            if (kb_Data[5] & kb_Tan)    return KEY_H;  // [TAN]
+            if (kb_Data[6] & kb_Power)  return KEY_I;  // [^]
+            if (kb_Data[2] & kb_Square) return KEY_J;  // [x^2]
+            if (kb_Data[3] & kb_Comma)  return KEY_K;  // [,]
+            if (kb_Data[4] & kb_LParen) return KEY_L;  // [(]
+            if (kb_Data[5] & kb_RParen) return KEY_M;  // [)]
+            if (kb_Data[6] & kb_Div)    return KEY_N;  // [÷]
+            if (kb_Data[2] & kb_Log)    return KEY_O;  // [LOG]
+            if (kb_Data[3] & kb_7)      return KEY_P;  // [7]
+            if (kb_Data[4] & kb_8)      return KEY_Q;  // [8]
+            if (kb_Data[5] & kb_9)      return KEY_R;  // [9]
+            if (kb_Data[6] & kb_Mul)    return KEY_S;  // [×]
+            if (kb_Data[2] & kb_Ln)     return KEY_T;  // [LN]
+            if (kb_Data[3] & kb_4)      return KEY_U;  // [4]
+            if (kb_Data[4] & kb_5)      return KEY_V;  // [5]
+            if (kb_Data[5] & kb_6)      return KEY_W;  // [6]
+            if (kb_Data[6] & kb_Sub)    return KEY_X;  // [-]
+            if (kb_Data[2] & kb_Sto)    return KEY_Y;  // [STO]
+            if (kb_Data[3] & kb_1)      return KEY_Z;  // [1]
+            return KEY_NONE;  // Alpha held alone: do nothing
         }
 
-        if (alpha_locked) {
-            // ── Alpha-mode letter mapping ──────────────────────────────────
-            // Letters are printed ABOVE each key face on your physical CE.
-            // Layout (verify against your unit if anything seems off):
-            //   [MATH]=A  [APPS]=B  [PRGM]=C  [VARS]=D
-            //   [^]  =E   [÷]  =F   [×]  =G   [−] =H   [+]=I
-            //   [9]  =J   [8]  =K   [7]  =L
-            //   [6]  =M   [5]  =N   [4]  =O
-            //   [3]  =P   [2]  =Q   [1]  =R
-            //   [(-)] =S  [.] =T   [0]  =U
-            //   [SIN]=V   [COS]=W  [TAN]=X
-            //   [Ln] =Y   [Log]=Z
-            if (kb_Data[2] & kb_Math)   return KEY_A;  // [Math]
-            if (kb_Data[3] & kb_Apps)   return KEY_B;  // [Apps / i]
-            if (kb_Data[4] & kb_Prgm)   return KEY_C;  // [Prgm]
-            if (kb_Data[5] & kb_Vars)   return KEY_D;  // [Vars]
-            if (kb_Data[6] & kb_Power)  return KEY_E;  // [^]
-            if (kb_Data[6] & kb_Div)    return KEY_F;  // [÷]
-            if (kb_Data[6] & kb_Mul)    return KEY_G;  // [×]
-            if (kb_Data[6] & kb_Sub)    return KEY_H;  // [−]
-            if (kb_Data[6] & kb_Add)    return KEY_I;  // [+]
-            if (kb_Data[5] & kb_9)      return KEY_J;
-            if (kb_Data[4] & kb_8)      return KEY_K;
-            if (kb_Data[3] & kb_7)      return KEY_L;
-            if (kb_Data[5] & kb_6)      return KEY_M;
-            if (kb_Data[4] & kb_5)      return KEY_N;
-            if (kb_Data[3] & kb_4)      return KEY_O;
-            if (kb_Data[5] & kb_3)      return KEY_P;
-            if (kb_Data[4] & kb_2)      return KEY_Q;
-            if (kb_Data[3] & kb_1)      return KEY_R;
-            if (kb_Data[5] & kb_Chs)    return KEY_S;  // [(-)]
-            if (kb_Data[4] & kb_DecPnt) return KEY_T;  // [.]
-            if (kb_Data[3] & kb_0)      return KEY_U;
-            if (kb_Data[3] & kb_Sin)    return KEY_V;
-            if (kb_Data[4] & kb_Cos)    return KEY_W;
-            if (kb_Data[5] & kb_Tan)    return KEY_X;
-            if (kb_Data[2] & kb_Ln)     return KEY_Y;
-            if (kb_Data[2] & kb_Log)    return KEY_Z;
-        } else {
-            // ── Normal mode: numeric / symbol input ────────────────────────
-            if (kb_Data[3] & kb_0)      return KEY_0;
-            if (kb_Data[3] & kb_1)      return KEY_1;
-            if (kb_Data[4] & kb_2)      return KEY_2;
-            if (kb_Data[5] & kb_3)      return KEY_3;
-            if (kb_Data[3] & kb_4)      return KEY_4;
-            if (kb_Data[4] & kb_5)      return KEY_5;
-            if (kb_Data[5] & kb_6)      return KEY_6;
-            if (kb_Data[3] & kb_7)      return KEY_7;
-            if (kb_Data[4] & kb_8)      return KEY_8;
-            if (kb_Data[5] & kb_9)      return KEY_9;
-            if (kb_Data[4] & kb_DecPnt) return KEY_PERIOD;
-            if (kb_Data[5] & kb_Chs)    return KEY_MINUS;  // change-sign key → '−'
-        }
+        // ── Normal mode: numeric / symbol input ────────────────────────────
+        if (kb_Data[3] & kb_0)      return KEY_0;
+        if (kb_Data[3] & kb_1)      return KEY_1;
+        if (kb_Data[4] & kb_2)      return KEY_2;
+        if (kb_Data[5] & kb_3)      return KEY_3;
+        if (kb_Data[3] & kb_4)      return KEY_4;
+        if (kb_Data[4] & kb_5)      return KEY_5;
+        if (kb_Data[5] & kb_6)      return KEY_6;
+        if (kb_Data[3] & kb_7)      return KEY_7;
+        if (kb_Data[4] & kb_8)      return KEY_8;
+        if (kb_Data[5] & kb_9)      return KEY_9;
+        if (kb_Data[4] & kb_DecPnt) return KEY_PERIOD;
+        if (kb_Data[5] & kb_Chs)    return KEY_MINUS;
         return KEY_NONE;
     }
 
@@ -191,8 +186,9 @@ public:
         // background, so text floats cleanly over coloured rectangles.
         gfx_SetTextBGColor(255);
         gfx_SetTextTransparentColor(255);
-        // Enable double-buffering: draw to off-screen buffer, flip with render()
-        gfx_SetDrawBuffer();
+        // Draw directly to screen (single-buffer) to avoid the 75 KB heap
+        // allocation that gfx_SetDrawBuffer() would make.
+        gfx_SetDrawScreen();
     }
 
     ~TIGui() {
@@ -247,8 +243,9 @@ public:
 
     // Flip off-screen buffer to screen and prepare next frame's draw buffer.
     void render() {
-        gfx_SwapDraw();
-        gfx_SetDrawBuffer();
+        // Single-buffer mode: drawing goes directly to the visible screen.
+        // Nothing to swap — just wait for the frame to finish.
+        gfx_Wait();
     }
 
     // ── Input ─────────────────────────────────────────────────────────────────

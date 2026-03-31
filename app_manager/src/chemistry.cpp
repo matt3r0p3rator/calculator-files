@@ -145,6 +145,24 @@ HeatColor getSmoothHeatmapColor(double val, double min_val, double max_val) {
     return {r, g, b, is_dark, false};
 }
 
+int searchScore(const Element& e, const string& query_lower) {
+    string name_l = e.name; for (char& c : name_l) c = tolower(c);
+    string sym_l = e.symbol; for (char& c : sym_l) c = tolower(c);
+    string cat_l = e.category; for (char& c : cat_l) c = tolower(c);
+    string block_l = e.block; for (char& c : block_l) c = tolower(c);
+    int score = 0;
+    if (sym_l == query_lower) score += 100;
+    else if (sym_l.find(query_lower) == 0) score += 60;
+    else if (sym_l.find(query_lower) != string::npos) score += 40;
+    if (name_l == query_lower) score += 80;
+    else if (name_l.find(query_lower) == 0) score += 50;
+    else if (name_l.find(query_lower) != string::npos) score += 30;
+    if (cat_l.find(query_lower) != string::npos) score += 20;
+    if (block_l == query_lower) score += 15;
+    if (e.group == query_lower || e.period == query_lower) score += 10;
+    return score;
+}
+
 void ChemistryApp::run(TIGui& gui) {
     AppStateP0 state0 = PEROIODIC_TABLE;
     AppStateP1 state1 = ELEMENT_LIST;
@@ -160,6 +178,9 @@ void ChemistryApp::run(TIGui& gui) {
     int detail_trend_menu_idx = 0; // 0=heatmap, 1=scatterplot
     int scatter_x_trend_idx = 0;
     int scatter_cursor_idx = 0;
+
+    // Periodic table search
+    string pt_search;
 
     // Polyatomics tab state
     string poly_search;
@@ -199,14 +220,36 @@ void ChemistryApp::run(TIGui& gui) {
             gui.drawTopBar("Periodic Table        Tab: Trends Explorer");
             if (state1 == ELEMENT_LIST) {
                 int start_x = 5;
-                int start_y = 25; // Original height to not overlap bottom text
+                int start_y = 25;
                 int cell_w = 17;
                 int cell_h = 17;
-                
+
+                // Compute search scores when query is active
+                string pt_query = pt_search;
+                for (char& c : pt_query) c = tolower(c);
+                bool searching = !pt_query.empty();
+
+                vector<int> scores(elements.size(), 0);
+                int max_score = 0, min_match_score = -1, match_count = 0;
+                if (searching) {
+                    for (size_t i = 0; i < elements.size(); i++) {
+                        scores[i] = searchScore(elements[i], pt_query);
+                        if (scores[i] > max_score) max_score = scores[i];
+                    }
+                    for (size_t i = 0; i < elements.size(); i++) {
+                        if (scores[i] > 0) {
+                            match_count++;
+                            if (min_match_score < 0 || scores[i] < min_match_score)
+                                min_match_score = scores[i];
+                        }
+                    }
+                    if (min_match_score < 0) min_match_score = 0;
+                }
+
                 for (size_t i = 0; i < elements.size(); i++) {
                     const Element& e = elements[i];
                     int col = -1, row = -1;
-                    
+
                     if (e.atomic_number >= 57 && e.atomic_number <= 71) {
                         row = 7;
                         col = (e.atomic_number - 57) + 2;
@@ -214,36 +257,65 @@ void ChemistryApp::run(TIGui& gui) {
                         row = 8;
                         col = (e.atomic_number - 89) + 2;
                     } else {
-                        // Safe atoi with default to -1 if empty
                         col = (e.group.empty()) ? -1 : atoi(e.group.c_str()) - 1;
                         row = (e.period.empty()) ? -1 : atoi(e.period.c_str()) - 1;
                     }
-                    
+
                     if (col >= 0 && row >= 0) {
                         int x = start_x + col * cell_w;
                         int y = start_y + row * cell_h;
-                        
-                        TIGuiColor cat_color = COLOR_LIGHT_GRAY;
-                        if (current_color_mode == MODE_CATEGORY) cat_color = getCategoryColor(e.category);
-                        else if (current_color_mode == MODE_BLOCK) cat_color = getBlockColor(e.block);
-                        
-                        if (i == (size_t)selected_element_idx && state1 != COLOR_OPTION_MENU) {
+
+                        bool is_selected = (i == (size_t)selected_element_idx);
+
+                        if (is_selected) {
                             gui.fillRect(x, y, cell_w, cell_h, COLOR_BLACK);
                             gui.drawText(x + 2, y + 2, e.symbol, COLOR_WHITE);
-                            
-                            // Bottom info pane
-                            string info = "Z=" + to_string(e.atomic_number) + " " + e.name + " (" + e.category + ")";
-                            gui.drawText(10, 203, info, COLOR_BLACK);
-                            gui.drawText(10, 215, "Weight: " + to_string(e.atomic_weight) + " | Config: " + e.electron_configuration, COLOR_DARK_GRAY);
+                        } else if (searching) {
+                            int sc = scores[i];
+                            if (sc == 0) {
+                                // Grey out non-matching elements
+                                gui.fillRectRGB(x, y, cell_w, cell_h, 160, 160, 160);
+                                gui.drawRect(x, y, cell_w, cell_h, COLOR_DARK_GRAY);
+                                gui.drawText(x + 2, y + 2, e.symbol, COLOR_DARK_GRAY);
+                            } else {
+                                // Green (best match) to red (lowest matching score)
+                                double ratio = (max_score > min_match_score)
+                                    ? (double)(sc - min_match_score) / (double)(max_score - min_match_score)
+                                    : 1.0;
+                                Uint8 r = (Uint8)((1.0 - ratio) * 220.0);
+                                Uint8 g = (Uint8)(ratio * 200.0 + 20.0);
+                                Uint8 b = 0;
+                                gui.fillRectRGB(x, y, cell_w, cell_h, r, g, b);
+                                gui.drawRect(x, y, cell_w, cell_h, COLOR_DARK_GRAY);
+                                bool dark = (0.299 * r + 0.587 * g + 0.114 * b) < 128.0;
+                                gui.drawText(x + 2, y + 2, e.symbol, dark ? COLOR_WHITE : COLOR_BLACK);
+                            }
                         } else {
+                            TIGuiColor cat_color = COLOR_LIGHT_GRAY;
+                            if (current_color_mode == MODE_CATEGORY) cat_color = getCategoryColor(e.category);
+                            else if (current_color_mode == MODE_BLOCK) cat_color = getBlockColor(e.block);
                             gui.fillRect(x, y, cell_w, cell_h, cat_color);
                             gui.drawRect(x, y, cell_w, cell_h, COLOR_DARK_GRAY);
                             gui.drawText(x + 2, y + 2, e.symbol, COLOR_BLACK);
                         }
                     }
                 }
-                
-                gui.drawBottomBar("Menu:Color | DPad:Move | ENTER:Info | ESC:Exit");
+
+                // Bottom info / search bar
+                const Element& sel = elements[selected_element_idx];
+                if (searching) {
+                    gui.fillRect(5, 181, 310, 13, COLOR_LIGHT_GRAY);
+                    gui.drawRect(5, 181, 310, 13, COLOR_DARK_GRAY);
+                    gui.drawText(8, 183, "Search: " + pt_search + "_", COLOR_BLACK);
+                    string info = "Z=" + to_string(sel.atomic_number) + " " + sel.name;
+                    gui.drawText(10, 203, info + " | " + to_string(match_count) + " results", COLOR_BLACK);
+                    gui.drawBottomBar("A-Z/0-9: Search | BKSP: Clear | DPad:Move | ENTER:Info");
+                } else {
+                    string info = "Z=" + to_string(sel.atomic_number) + " " + sel.name + " (" + sel.category + ")";
+                    gui.drawText(10, 203, info, COLOR_BLACK);
+                    gui.drawText(10, 215, "Weight: " + to_string(sel.atomic_weight) + " | Config: " + sel.electron_configuration, COLOR_DARK_GRAY);
+                    gui.drawBottomBar("Menu:Color | DPad:Move | ENTER:Info | A-Z:Search");
+                }
             } else if (state1 == COLOR_OPTION_MENU) {
                 gui.drawTopBar("Periodic Table - Color Options");
                 
@@ -592,6 +664,8 @@ void ChemistryApp::run(TIGui& gui) {
                 if (sym == SDLK_ESCAPE) {
                     if (state0 == POLYATOMIC_LIST) {
                         running = false;
+                    } else if (state0 == PEROIODIC_TABLE && state1 == ELEMENT_LIST && !pt_search.empty()) {
+                        pt_search = "";
                     } else if (state0 == PEROIODIC_TABLE && state1 == ELEMENT_DETAIL) {
                         state1 = ELEMENT_LIST;
                     } else if (state0 == PEROIODIC_TABLE && state1 == COLOR_OPTION_MENU) {
@@ -804,6 +878,19 @@ void ChemistryApp::run(TIGui& gui) {
                             poly_scroll_offset = 0;
                             poly_selected_idx = 0;
                         }
+                    }
+                } else if (state0 == PEROIODIC_TABLE && state1 == ELEMENT_LIST) {
+                    if (sym >= SDLK_a && sym <= SDLK_z) {
+                        if (pt_search.size() < 20)
+                            pt_search += (char)('a' + (sym - SDLK_a));
+                    } else if (sym >= SDLK_0 && sym <= SDLK_9) {
+                        if (pt_search.size() < 20)
+                            pt_search += (char)('0' + (sym - SDLK_0));
+                    } else if (sym >= SDLK_KP0 && sym <= SDLK_KP9) {
+                        if (pt_search.size() < 20)
+                            pt_search += (char)('0' + (sym - SDLK_KP0));
+                    } else if (sym == SDLK_BACKSPACE || sym == SDLK_DELETE) {
+                        if (!pt_search.empty()) pt_search.pop_back();
                     }
                 }
             }

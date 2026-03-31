@@ -5,5 +5,5 @@
 
 	public ___description
 ___description:
-	db	"App Manager CE", 0
+	db	"Chemistry Explorer CE", 0
 ___prgm_init:

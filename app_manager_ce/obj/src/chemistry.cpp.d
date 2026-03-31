@@ -1,20 +1,15 @@
 obj/src/chemistry.cpp.bc: src/chemistry.cpp src/../include/ce_gui.hpp \
-  /home/matt3r/CEdev/include/graphx.h \
-  /home/matt3r/CEdev/include/stdint.h /home/matt3r/CEdev/include/cdefs.h \
-  /home/matt3r/CEdev/include/stdlib.h \
-  /home/matt3r/CEdev/include/stdbool.h \
-  /home/matt3r/CEdev/include/keypadc.h \
-  /home/matt3r/CEdev/include/string.h src/../include/chemistry.hpp \
+  /root/CEdev/include/graphx.h /root/CEdev/include/stdint.h \
+  /root/CEdev/include/cdefs.h /root/CEdev/include/stdlib.h \
+  /root/CEdev/include/stdbool.h /root/CEdev/include/keypadc.h \
+  /root/CEdev/include/string.h src/../include/chemistry.hpp \
   src/../include/app.hpp src/../include/chemistry_data.hpp \
   src/../include/trend_data.hpp src/../include/polyatomic_data.hpp \
-  /home/matt3r/CEdev/include/c++/cstdio \
-  /home/matt3r/CEdev/include/stdio.h /home/matt3r/CEdev/include/stdarg.h \
-  /home/matt3r/CEdev/include/c++/cmath \
-  /home/matt3r/CEdev/include/__math_def.h \
-  /home/matt3r/CEdev/include/c++/__cmath_type_traits \
-  /home/matt3r/CEdev/include/c++/__config \
-  /home/matt3r/CEdev/include/c++/__abs_overloads \
-  /home/matt3r/CEdev/include/c++/cctype \
-  /home/matt3r/CEdev/include/ctype.h \
-  /home/matt3r/CEdev/include/c++/cstring \
-  /home/matt3r/CEdev/include/c++/cstdlib
+  /root/CEdev/include/c++/cstdio /root/CEdev/include/stdio.h \
+  /root/CEdev/include/stdarg.h /root/CEdev/include/c++/cmath \
+  /root/CEdev/include/__math_def.h \
+  /root/CEdev/include/c++/__cmath_type_traits \
+  /root/CEdev/include/c++/__config \
+  /root/CEdev/include/c++/__abs_overloads /root/CEdev/include/c++/cctype \
+  /root/CEdev/include/ctype.h /root/CEdev/include/c++/cstring \
+  /root/CEdev/include/c++/cstdlib

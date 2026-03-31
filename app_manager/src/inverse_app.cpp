@@ -10,17 +10,16 @@
 
 using namespace std;
 
+static void fill_identity(vector<vector<string>>& grid, int n) {
+    grid.assign(n, vector<string>(n, "0"));
+    for (int i = 0; i < n; i++) grid[i][i] = "1";
+}
+
 enum InvAppState {
     STATE_DIMS,
     STATE_INPUT,
     STATE_SOLVING
 };
-
-// Populate grid with the n×n identity matrix as a placeholder
-static void fill_identity(vector<vector<string>>& grid, int n) {
-    grid.assign(n, vector<string>(n, "0"));
-    for (int i = 0; i < n; i++) grid[i][i] = "1";
-}
 
 void InverseApp::run(TIGui& gui) {
     InvAppState state = STATE_DIMS;

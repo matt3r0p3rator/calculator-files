@@ -1,9 +1,9 @@
 #ifndef SOLVER_HPP
 #define SOLVER_HPP
 
-#define GAUSS_MAX_N     6
-#define GAUSS_MAX_COLS  7   // max rows + augmented column
-#define GAUSS_MAX_STEPS 80
+#define GAUSS_MAX_N     4
+#define GAUSS_MAX_COLS  5   // 4 unknowns + augmented column
+#define GAUSS_MAX_STEPS 50
 
 struct Step {
     char msg[100];

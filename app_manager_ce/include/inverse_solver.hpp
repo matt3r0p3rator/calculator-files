@@ -1,8 +1,8 @@
 #ifndef INVERSE_SOLVER_HPP
 #define INVERSE_SOLVER_HPP
 
-#define INV_MAX_N     6
-#define INV_MAX_STEPS 80
+#define INV_MAX_N     4
+#define INV_MAX_STEPS 50
 
 struct InvStep {
     char msg[100];

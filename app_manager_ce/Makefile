@@ -3,10 +3,15 @@
 # Target: App Manager CE  (TI-84 CE / CE Python Edition via Artifice)
 # ─────────────────────────────────────────────────────────────────────────────
 
-NAME        = APPMGR
-DESCRIPTION = "App Manager CE"
-COMPRESSED  = NO
+NAME        = CHEMAPP
+DESCRIPTION = "Chemistry Explorer CE"
+COMPRESSED  = YES
 ARCHIVED    = NO
+
+LIBS = graphx keypadc
+
+# Only compile files actually used — exclude dead math-app sources
+SRCS = src/main.cpp src/chemistry.cpp
 
 # -Oz = optimise for size; -std=c++17 for range-based loops
 CFLAGS   = -Wall -Wextra -Oz
